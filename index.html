@@ -912,6 +912,16 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (!meta) meta = { none: true, fetchedAt: Date.now() };
       await save(it.id, meta);
     }
+    if (!meta.none && meta.src === 'omdb' && k.tmdb && meta.imdbId && !meta.tmdbTried) {
+      try {
+        const f = await tmdb('/find/' + meta.imdbId, { external_source: 'imdb_id' });
+        const mv = (f.movie_results || [])[0], tv = (f.tv_results || [])[0];
+        const hit = mv ? { id: mv.id, mt: 'movie' } : tv ? { id: tv.id, mt: 'tv' } : null;
+        if (hit) { const d = await tmdbDetails(hit.id, hit.mt, it); d.imdb = meta.imdb; if (!d.imdbId) d.imdbId = meta.imdbId; meta = d; }
+        else meta.tmdbTried = true;
+        await save(it.id, meta);
+      } catch (e) { if (/401/.test(e.message)) throw e; }
+    }
     if (level === 'full' && !meta.none && k.omdb && meta.imdbId && omdbLeft() > 0 &&
         (!meta.imdb || Date.now() - meta.imdb.at > 30 * 864e5)) {
       try { const j = await omdb({ i: meta.imdbId }); if (j.Response !== 'False') { applyImdb(meta, j); await save(it.id, meta); } }
@@ -977,7 +987,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* سينماتيك حمد — core: state, router, home, sections, settings, background fetching */
 (function () {
   'use strict';
-  const VERSION = '1.4';
+  const VERSION = '1.5';
 
   const SECTIONS = [
     { key: 'foreign', label: 'الأفلام الأجنبية', ic: '🎞️', tv: false },
@@ -1156,6 +1166,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       const m = App.meta[it.id];
       if (!m) return true;
       if (m.none) return false;
+      if (k.tmdb && m.src === 'omdb' && m.imdbId && !m.tmdbTried) return true;
       return !!(k.omdb && m.imdbId && !m.imdb);
     }).map(it => it.id);
     Object.assign(Bulk, { on: true, done: 0, total: list.length, list });
@@ -1863,7 +1874,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     try {
       const col = await Meta.collection(c.id);
       if (cur !== it || !$('#collBox')) return;
-      const owned = ownedByTmdb();
+      const owned = ownedByTmdb(col.parts);
       const have = col.parts.filter(p => owned.has(p.id)).length;
       $('#collBox').innerHTML = `<b>🔗 ${esc(col.name)}</b> <span class="sub">— عندك ${have} من ${col.parts.length}</span>
         <div class="rail" style="margin-top:10px">${col.parts.map(p => {
@@ -1873,10 +1884,23 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         }).join('')}</div>`;
     } catch (e) { if ($('#collBox')) $('#collBox').remove(); }
   }
-  function ownedByTmdb() {
-    const map = new Map();
-    for (const o of App.items) { const om = App.m(o.id); if (om && om.tmdbId && om.mt === 'movie' && !map.has(om.tmdbId)) map.set(om.tmdbId, o); }
-    return map;
+  // map each collection part -> the film in the library: exact TMDB id first, then title + year
+  function ownedByTmdb(parts) {
+    const byId = new Map(), byName = new Map();
+    const key = (t, y) => Parser.slug(String(t || '').replace(/^the\s+/i, '')) + '|' + (y || '');
+    for (const o of App.items) {
+      if (o.type !== 'movie') continue;
+      const om = App.m(o.id);
+      if (om && om.tmdbId && om.mt === 'movie' && !byId.has(om.tmdbId)) byId.set(om.tmdbId, o);
+      const y = App.year(o);
+      for (const t of [o.title, om && om.title, om && om.orig]) if (t) for (const yy of [y, y - 1, y + 1]) { const k = key(t, yy); if (!byName.has(k)) byName.set(k, o); }
+    }
+    const out = new Map();
+    for (const p of parts || []) {
+      const hit = byId.get(p.id) || byName.get(key(p.title, +p.year));
+      if (hit) out.set(p.id, hit);
+    }
+    return out;
   }
   App.ownedByTmdb = ownedByTmdb;
 
@@ -2130,7 +2154,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     view.innerHTML = '<p class="sub">⏳ جاري التحميل…</p>';
     try {
       const col = await Meta.collection(+id);
-      const owned = App.ownedByTmdb();
+      const owned = App.ownedByTmdb(col.parts);
       const have = col.parts.filter(p => owned.has(p.id));
       view.innerHTML = `${col.backdrop ? `<div class="hero" style="min-height:200px"><div class="hero-bg" style="background-image:url('${esc(col.backdrop)}')"></div>
         <div class="hero-body"><div><div class="hero-tag">🔗 سلسلة</div><div class="hero-title ltr">${esc(col.name)}</div><div class="hero-meta">عندك ${have.length} من ${col.parts.length} أجزاء</div></div></div></div>`
