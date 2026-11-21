@@ -290,6 +290,53 @@ h2.sec .more{margin-inline-start:auto;font-size:14px;color:var(--gold);font-weig
 @media (min-width:1000px){ .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))} }
 .li .thumb .ph{font-size:0;padding:0}.li .thumb .ph small{display:none}
 
+/* ---------- table view ---------- */
+.tbl{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:clip}
+.thead,.trow{display:grid;grid-template-columns:44px minmax(0,1fr) 128px 84px 84px;align-items:center;gap:6px;padding:0 10px}
+.thead{position:sticky;top:var(--hdr,104px);z-index:5;background:var(--surface2);border-bottom:1px solid var(--line);min-height:44px}
+.thead .th0{text-align:center;color:var(--muted);font-size:13px}
+.th{border:0;background:none;font-size:13px;font-weight:700;color:var(--ink2);text-align:start;padding:12px 2px;white-space:nowrap}
+.th.on{color:var(--gold)}
+.thead .c1,.thead .c2,.thead .c3,.trow .tdate,.trow .trate,.trow .trun{text-align:center}
+.trow{border-bottom:1px solid var(--line);min-height:62px;cursor:pointer;font-size:14px}
+.trow:last-child{border-bottom:0}
+.trow:active{background:var(--surface2)}
+.tchk{width:30px;height:30px;border-radius:9px;border:2px solid var(--line);background:transparent;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;margin:auto}
+.tchk.on{background:var(--green);border-color:var(--green);color:#03281a}
+.tname{display:flex;align-items:center;gap:10px;min-width:0;font-weight:600}
+.tname span[dir]{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35}
+.tthumb{width:34px;height:50px;border-radius:5px;overflow:hidden;background:var(--surface2);flex:none;position:relative}
+.tthumb img{width:100%;height:100%;object-fit:cover}
+.tdate{color:var(--ink2);font-size:13px}
+.trun{color:var(--ink2);font-size:13px;white-space:nowrap}
+.muted{color:var(--muted)}
+.trow.sel{background:rgba(232,185,79,.16);box-shadow:inset 4px 0 0 var(--gold)}
+@media (max-width:600px){
+  .thead,.trow{grid-template-columns:36px minmax(0,1fr) 84px 54px 58px;gap:4px;padding:0 6px}
+  .tthumb{width:28px;height:42px}
+  .trow{font-size:13px}
+  .tdate,.trun{font-size:11.5px}
+  .trate .bdg{font-size:10.5px;padding:2px 4px}
+}
+
+/* ---------- multi-select ---------- */
+#btnSel.on{background:var(--gold);color:#1a1405;border-color:var(--gold)}
+.card.sel .poster{outline:3px solid var(--gold);outline-offset:-3px}
+.card.sel .poster::after{content:"✓";position:absolute;inset-inline-end:8px;bottom:8px;width:30px;height:30px;border-radius:50%;background:var(--gold);color:#1a1405;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+body.selecting .card:not(.sel) .poster{opacity:.75}
+body.selecting .view{padding-bottom:110px}
+.sel-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + var(--safe-b));z-index:44;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;background:rgba(29,34,48,.97);border:1px solid var(--gold);border-radius:18px;padding:10px 14px;box-shadow:0 14px 40px rgba(0,0,0,.6);width:max-content;max-width:calc(100vw - 20px);animation:up .2s}
+.sel-bar b{color:var(--gold);margin-inline-end:4px}
+.card,.trow{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
+/* ---------- poster zoom ---------- */
+.zoom{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;touch-action:none;animation:fade .2s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.zoom img{max-width:94vw;max-height:90vh;max-height:90dvh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.8);transform-origin:center center;will-change:transform;user-select:none;-webkit-user-drag:none}
+.zoom .z-close{position:absolute;top:calc(12px + var(--safe-t));inset-inline-start:12px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:20px;z-index:2}
+.zoom .z-hint{position:absolute;bottom:calc(14px + var(--safe-b));color:rgba(255,255,255,.55);font-size:12px}
+.m-poster{cursor:zoom-in}
+
 </style>
 </head>
 <body>
@@ -633,6 +680,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     put: (store, key, val) => tx(store, 'readwrite', s => { s.put(val, key); }),
     del: (store, key) => tx(store, 'readwrite', s => { s.delete(key); }),
     clear: store => tx(store, 'readwrite', s => { s.clear(); }),
+    putMany: (store, obj) => tx(store, 'readwrite', s => { for (const k in obj) s.put(obj[k], k); }),
     async all(store) {
       const db = await open();
       return new Promise((res, rej) => {
@@ -929,7 +977,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* سينماتيك حمد — core: state, router, home, sections, settings, background fetching */
 (function () {
   'use strict';
-  const VERSION = '1.3';
+  const VERSION = '1.4';
 
   const SECTIONS = [
     { key: 'foreign', label: 'الأفلام الأجنبية', ic: '🎞️', tv: false },
@@ -1046,6 +1094,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   };
   App.refreshCards = function (id) {
     const it = App.byId[id]; if (!it) return;
+    for (const r of $$(`.trow[data-id="${CSS.escape(id)}"]`)) {
+      const oi = r.querySelector('.tthumb img');
+      const tmp = document.createElement('div'); tmp.innerHTML = App.row(it); const nr = tmp.firstElementChild;
+      const ni = nr.querySelector('.tthumb img');
+      if (oi && ni && oi.getAttribute('src') === ni.getAttribute('src')) ni.replaceWith(oi);
+      if (r.classList.contains('sel')) nr.classList.add('sel');
+      r.replaceWith(nr);
+    }
     for (const el of $$(`.card[data-id="${CSS.escape(id)}"]`)) {
       const cls = el.className.replace('card', '').trim();
       const sub = el.querySelector('.card-y').innerHTML;
@@ -1184,7 +1240,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   /* open details on any card */
   document.addEventListener('click', e => {
-    const c = e.target.closest('.card[data-id], .li[data-id], [data-open]');
+    const c = e.target.closest('.card[data-id], .li[data-id], .trow[data-id], [data-open]');
     if (c && !e.target.closest('.search-results') && !c.dataset.nav) { e.preventDefault(); Details.open(c.dataset.id || c.dataset.open); }
   });
 
@@ -1204,7 +1260,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     fn(view, parts.slice(1).map(decodeURIComponent));
   }
   App.route = route;
-  window.addEventListener('hashchange', () => { if (window.Details) Details.close(true); route(); });
+  window.addEventListener('hashchange', () => { if (window.Details) Details.close(true); if (App.sel && App.sel.on) App.selEnd(); route(); });
 
   /* ---------- welcome / import ---------- */
   function renderWelcome(view) {
@@ -1212,8 +1268,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <div class="big">🎬</div><h1>أهلاً بك في سينماتيك حمد</h1>
       <p>ارفع ملف قاعدة بيانات الأفلام والمسلسلات (Excel) ليبني التطبيق مكتبتك. يُحفظ الملف على هذا الجهاز فقط.</p>
       <p style="margin:24px 0"><label class="btn gold file-btn">📂 اختيار ملف Excel<input type="file" accept=".xlsm,.xlsx,.xls" id="fileIn"></label></p>
-      <p id="impMsg" class="sub"></p></div>`;
+      <p id="impMsg" class="sub"></p>
+      <p class="sub" style="margin-top:30px">نقلت مكتبتك من جهاز آخر؟</p>
+      <label class="btn file-btn">📥 استيراد المكتبة كاملة<input type="file" accept=".json,application/json" id="impAll0"></label>
+      <p id="allMsg" class="sub"></p></div>`;
     $('#fileIn').onchange = e => importFile(e.target.files[0]);
+    $('#impAll0').onchange = e => importAll(e.target.files[0]);
   }
   async function importFile(file) {
     if (!file) return;
@@ -1283,43 +1343,162 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   /* ---------- SECTION ---------- */
   const SORTS = [
-    ['title', 'الاسم'], ['year-d', 'الأحدث'], ['year-a', 'الأقدم'], ['rate', 'التقييم'], ['size', 'الحجم'], ['quality', 'الجودة']
+    ['title', 'الاسم (أ-ي)'], ['title-d', 'الاسم (ي-أ)'], ['year-d', 'الأحدث'], ['year-a', 'الأقدم'],
+    ['rate', 'الأعلى تقييماً'], ['rate-a', 'الأقل تقييماً'], ['run-d', 'الأطول مدة'], ['run-a', 'الأقصر مدة'],
+    ['size', 'الحجم'], ['quality', 'الجودة']
   ];
   const QRANK = { '2160p': 4, '1080p': 3, '720p': 2, '576p': 1, '480p': 1, SD: 0, '': -1 };
+  const dateKey = it => { const m = App.m(it.id); if (m && m.date) return m.date; const y = App.year(it); return y ? y + '-99' : ''; };
+  const runOf = it => { const m = App.m(it.id); return m && m.runtime ? m.runtime : 0; };
   App.sortItems = function (arr, sort) {
+    const tt = (a, b) => a.title.localeCompare(b.title, 'ar', { numeric: true });
     const by = {
-      title: (a, b) => a.title.localeCompare(b.title, 'ar', { numeric: true }),
-      'year-d': (a, b) => (App.year(b) || 0) - (App.year(a) || 0) || a.title.localeCompare(b.title),
-      'year-a': (a, b) => (App.year(a) || 9999) - (App.year(b) || 9999) || a.title.localeCompare(b.title),
-      rate: (a, b) => (App.anyRating(b) || 0) - (App.anyRating(a) || 0) || a.title.localeCompare(b.title),
+      title: tt,
+      'title-d': (a, b) => tt(b, a),
+      'year-d': (a, b) => (dateKey(b) || '0').localeCompare(dateKey(a) || '0') || tt(a, b),
+      'year-a': (a, b) => (dateKey(a) || '9999').localeCompare(dateKey(b) || '9999') || tt(a, b),
+      rate: (a, b) => (App.anyRating(b) || 0) - (App.anyRating(a) || 0) || tt(a, b),
+      'rate-a': (a, b) => (App.anyRating(a) || 99) - (App.anyRating(b) || 99) || tt(a, b),
+      'run-d': (a, b) => runOf(b) - runOf(a) || tt(a, b),
+      'run-a': (a, b) => (runOf(a) || 9999) - (runOf(b) || 9999) || tt(a, b),
       size: (a, b) => b.size - a.size,
-      quality: (a, b) => (QRANK[b.quality] || 0) - (QRANK[a.quality] || 0) || a.title.localeCompare(b.title)
-    }[sort] || ((a, b) => 0);
+      quality: (a, b) => (QRANK[b.quality] || 0) - (QRANK[a.quality] || 0) || tt(a, b)
+    }[sort] || (() => 0);
     return arr.slice().sort(by);
   };
 
+  /* ----- table rows ----- */
+  const fmtDate = it => {
+    const m = App.m(it.id);
+    if (m && m.date && /^\d{4}-\d{2}-\d{2}/.test(m.date)) {
+      const d = new Date(m.date + 'T12:00:00');
+      if (!isNaN(d)) return d.toLocaleDateString('ar-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    return App.year(it) || '—';
+  };
+  const fmtRun = it => {
+    if (it.eps) return it.eps.length + ' حلقة';
+    const r = runOf(it); if (!r) return '—';
+    return (r >= 60 ? Math.floor(r / 60) + 'س ' : '') + (r % 60) + 'د';
+  };
+  App.row = function (it) {
+    const m = App.m(it.id); const w = App.isWatched(it); const rt = App.rating(it);
+    return `<div class="trow${App.sel.ids.has(it.id) ? ' sel' : ''}" data-id="${esc(it.id)}">
+      <button class="tchk${w ? ' on' : ''}" data-tw="1" aria-label="شاهدته">${w ? '✓' : ''}</button>
+      <div class="tname"><span class="tthumb">${m && m.poster ? `<img src="${esc(m.poster)}" alt="" referrerpolicy="no-referrer" onerror="App.imgErr(this)">` : ''}</span><span dir="auto">${esc(it.title)}</span></div>
+      <div class="tdate">${fmtDate(it)}</div>
+      <div class="trate">${rt ? `<span class="bdg rate">★ ${rt.toFixed(1)}</span>` : '<span class="muted">—</span>'}</div>
+      <div class="trun">${fmtRun(it)}</div></div>`;
+  };
+  App.observeRows = root => { if (!io) return; for (const el of $$('.trow', root)) if (!App.meta[el.dataset.id] && Meta.hasKeys()) { el.dataset.need = '1'; io.observe(el); } };
+
+  /* ----- multi-select ----- */
+  App.sel = { on: false, ids: new Set(), visible: () => [] };
+  function selBar() {
+    let bar = $('#selBar');
+    if (!App.sel.on) { if (bar) bar.remove(); document.body.classList.remove('selecting'); return; }
+    document.body.classList.add('selecting');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'selBar'; bar.className = 'sel-bar'; document.body.appendChild(bar); }
+    const n = App.sel.ids.size;
+    bar.innerHTML = `<b>${fmtNum(n)} محدد</b>
+      <button class="btn sm gold" data-sa="seen"${n ? '' : ' disabled'}>✓ شاهدته</button>
+      <button class="btn sm" data-sa="unseen"${n ? '' : ' disabled'}>إلغاء المشاهدة</button>
+      <button class="btn sm" data-sa="list"${n ? '' : ' disabled'}>➕ قائمتي</button>
+      <button class="btn sm" data-sa="all">تحديد الكل الظاهر (${fmtNum(App.sel.visible().length)})</button>
+      <button class="btn sm red" data-sa="cancel">إلغاء</button>`;
+  }
+  App.selStart = function (firstId) {
+    App.sel.on = true; App.sel.ids.clear(); if (firstId) App.sel.ids.add(firstId);
+    $$('.card[data-id], .trow[data-id]', $('#view')).forEach(el => el.classList.toggle('sel', App.sel.ids.has(el.dataset.id)));
+    const b = $('#btnSel'); if (b) b.classList.add('on');
+    selBar();
+  };
+  App.selEnd = function () {
+    App.sel.on = false; App.sel.ids.clear();
+    $$('.sel', $('#view')).forEach(el => el.classList.remove('sel'));
+    const b = $('#btnSel'); if (b) b.classList.remove('on');
+    selBar();
+  };
+  function selToggle(id) {
+    if (App.sel.ids.has(id)) App.sel.ids.delete(id); else App.sel.ids.add(id);
+    $$(`[data-id="${CSS.escape(id)}"]`, $('#view')).forEach(el => el.classList.toggle('sel', App.sel.ids.has(id)));
+    selBar();
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#selBar [data-sa]'); if (!b) return;
+    const a = b.dataset.sa; const ids = [...App.sel.ids];
+    if (a === 'cancel') { App.selEnd(); return; }
+    if (a === 'all') {
+      for (const it of App.sel.visible()) App.sel.ids.add(it.id);
+      $$('.card[data-id], .trow[data-id]', $('#view')).forEach(el => el.classList.toggle('sel', App.sel.ids.has(el.dataset.id)));
+      selBar(); return;
+    }
+    for (const id of ids) {
+      const it = App.byId[id]; if (!it) continue;
+      if (a === 'seen' && !App.isWatched(it)) App.setWatched(it, true);
+      else if (a === 'unseen' && App.isWatched(it)) App.setWatched(it, false);
+      else if (a === 'list') User.list[id] = User.list[id] || Date.now();
+    }
+    saveUser();
+    toast(a === 'seen' ? `✓ تم تعليم ${ids.length} كمشاهَد` : a === 'unseen' ? `أُلغيت المشاهدة عن ${ids.length}` : `أُضيف ${ids.length} إلى قائمتي`);
+    App.selEnd();
+    if (App._secApply) App._secApply(true);
+  });
+  // long-press on a poster or row starts selection
+  let lpT = null, lpFired = false, lpXY = null;
+  document.addEventListener('touchstart', e => {
+    const c = e.target.closest('#view .grid .card[data-id], #view .trow[data-id]'); if (!c) return;
+    lpFired = false; lpXY = [e.touches[0].clientX, e.touches[0].clientY];
+    lpT = setTimeout(() => { lpFired = true; if (!App.sel.on) App.selStart(c.dataset.id); else selToggle(c.dataset.id); if (navigator.vibrate) navigator.vibrate(15); }, 520);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => { if (lpT && lpXY && Math.hypot(e.touches[0].clientX - lpXY[0], e.touches[0].clientY - lpXY[1]) > 10) { clearTimeout(lpT); lpT = null; } }, { passive: true });
+  document.addEventListener('touchend', () => { clearTimeout(lpT); lpT = null; }, { passive: true });
+  document.addEventListener('contextmenu', e => { if (e.target.closest('#view .card[data-id], #view .trow[data-id]')) e.preventDefault(); });
+  // capture phase: selection mode and long-press take priority over opening the film
+  document.addEventListener('click', e => {
+    const c = e.target.closest('#view .card[data-id], #view .trow[data-id]');
+    if (!c) return;
+    if (lpFired) { lpFired = false; e.preventDefault(); e.stopPropagation(); return; }
+    if (e.target.closest('[data-tw]')) {
+      e.preventDefault(); e.stopPropagation();
+      const it = App.byId[c.dataset.id]; App.setWatched(it, !App.isWatched(it)); return;
+    }
+    if (App.sel.on) { e.preventDefault(); e.stopPropagation(); selToggle(c.dataset.id); }
+  }, true);
+
   Views.sec = function (view, [key]) {
     const s = secOf(key); if (!s) { location.hash = '#/home'; return; }
-    const st = App.secState[key] = App.secState[key] || { q: '', sort: s.tv ? 'title' : 'title', dec: '', qual: '', genre: '', w: 'all' };
+    const st = App.secState[key] = App.secState[key] || { q: '', sort: 'title', dec: '', qual: '', genre: '', w: 'all', view: Settings.get('view.' + key, 'grid') };
     const all = App.items.filter(it => it.sec === key);
     const decades = [...new Set(all.map(it => decadeOf(App.year(it))).filter(Boolean))].sort((a, b) => b - a);
     const quals = [...new Set(all.map(it => it.quality).filter(Boolean))].sort((a, b) => (QRANK[b] || 0) - (QRANK[a] || 0));
     const genres = [...new Set(all.flatMap(App.genres))].sort((a, b) => a.localeCompare(b, 'ar'));
+    const sorts = SORTS.filter(x => !(s.tv && (x[0] === 'quality' || x[0].startsWith('run'))));
 
     view.innerHTML = `<h1 class="page">${s.ic} ${s.label}</h1>
       <div class="toolbar">
         <input type="search" id="fq" placeholder="بحث في ${s.label}…" value="${esc(st.q)}">
-        <select id="fsort">${SORTS.filter(x => !(s.tv && x[0] === 'quality')).map(([v, l]) => `<option value="${v}"${st.sort === v ? ' selected' : ''}>ترتيب: ${l}</option>`).join('')}</select>
+        <select id="fsort">${sorts.map(([v, l]) => `<option value="${v}"${st.sort === v ? ' selected' : ''}>ترتيب: ${l}</option>`).join('')}</select>
         ${decades.length > 1 ? `<select id="fdec"><option value="">كل العقود</option>${decades.map(d => `<option value="${d}"${String(st.dec) === String(d) ? ' selected' : ''}>${d}s</option>`).join('')}</select>` : ''}
         ${quals.length > 1 ? `<select id="fqual"><option value="">كل الجودات</option>${quals.map(q => `<option${st.qual === q ? ' selected' : ''}>${q}</option>`).join('')}</select>` : ''}
         ${genres.length ? `<select id="fgen"><option value="">كل الأنواع</option>${genres.map(g => `<option${st.genre === g ? ' selected' : ''}>${esc(g)}</option>`).join('')}</select>` : ''}
         <div class="seg" id="fw">${[['all', 'الكل'], ['seen', 'شاهدته'], ['unseen', 'لم أشاهده'], ['list', 'قائمتي']].map(([v, l]) => `<button data-v="${v}" class="${st.w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="seg" id="fview"><button data-v="grid" class="${st.view === 'grid' ? 'on' : ''}" title="بوسترات">🔲</button><button data-v="table" class="${st.view === 'table' ? 'on' : ''}" title="جدول">📋</button></div>
+        <button class="btn sm" id="btnSel">☑️ تحديد</button>
         <span class="count" id="fcount"></span>
       </div>
-      <div class="grid" id="grid"></div><div class="sentinel" id="sent"></div>`;
+      <div id="grid"></div><div class="sentinel" id="sent"></div>`;
 
     let list = [], shown = 0; const STEP = 60;
-    function apply() {
+    App.sel.visible = () => list;
+    const TCOLS = [['title', 'title-d', 'الاسم'], ['year-a', 'year-d', 'التاريخ'], ['rate', 'rate-a', 'التقييم'], ['run-d', 'run-a', s.tv ? 'الحلقات' : 'المدة']];
+    function head() {
+      return `<div class="thead"><div class="th0">✓</div>${TCOLS.map(([a, b, l], i) => {
+        const on = st.sort === a || st.sort === b; const arrow = on ? (st.sort === a ? ' ▲' : ' ▼') : '';
+        return `<button class="th${on ? ' on' : ''} c${i}" data-ts="${i}">${l}${arrow}</button>`; }).join('')}</div>`;
+    }
+    function apply(keepScroll) {
+      const y = scrollY;
       const q = Parser.slug(st.q);
       list = all.filter(it =>
         (!q || App.matchText(it, q)) &&
@@ -1329,13 +1508,24 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         (st.w === 'all' || (st.w === 'seen' ? App.isWatched(it) : st.w === 'unseen' ? !App.isWatched(it) : !!User.list[it.id])));
       list = App.sortItems(list, st.sort);
       $('#fcount').textContent = `${fmtNum(list.length)} ${s.tv ? 'مسلسل' : 'فيلم'}`;
-      $('#grid').innerHTML = ''; shown = 0; more();
+      const g = $('#grid');
+      g.className = st.view === 'table' ? 'tbl' + (s.tv ? ' tv' : '') : 'grid';
+      g.innerHTML = st.view === 'table' ? head() : '';
+      shown = 0; more();
+      if (keepScroll) { while (shown < list.length && document.body.scrollHeight < y + innerHeight) more(); scrollTo(0, y); }
+      if (App.sel.on) selBar();
     }
+    App._secApply = apply;
     function more() {
-      if (shown >= list.length) { if (!list.length) $('#grid').innerHTML = '<div class="empty">لا توجد نتائج</div>'; return; }
+      const g = $('#grid'); if (!g) return;
+      if (shown >= list.length) { if (!list.length) g.insertAdjacentHTML('beforeend', '<div class="empty">لا توجد نتائج</div>'); return; }
       const chunk = list.slice(shown, shown + STEP); shown += chunk.length;
-      $('#grid').insertAdjacentHTML('beforeend', chunk.map(it => App.card(it)).join(''));
-      App.observeCards($('#grid'));
+      if (st.view === 'table') { g.insertAdjacentHTML('beforeend', chunk.map(App.row).join('')); App.observeRows(g); }
+      else {
+        g.insertAdjacentHTML('beforeend', chunk.map(it => App.card(it)).join(''));
+        if (App.sel.on) for (const it of chunk) if (App.sel.ids.has(it.id)) { const el = g.querySelector(`.card[data-id="${CSS.escape(it.id)}"]`); if (el) el.classList.add('sel'); }
+        App.observeCards(g);
+      }
     }
     let t;
     $('#fq').oninput = e => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value; apply(); }, 180); };
@@ -1344,8 +1534,17 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if ($('#fqual')) $('#fqual').onchange = e => { st.qual = e.target.value; apply(); };
     if ($('#fgen')) $('#fgen').onchange = e => { st.genre = e.target.value; apply(); };
     $('#fw').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.w = b.dataset.v; $$('#fw button').forEach(x => x.classList.toggle('on', x === b)); apply(); };
+    $('#fview').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.view = b.dataset.v; Settings.set('view.' + key, st.view); $$('#fview button').forEach(x => x.classList.toggle('on', x === b)); apply(); };
+    $('#btnSel').onclick = () => (App.sel.on ? App.selEnd() : App.selStart());
+    $('#grid').addEventListener('click', e => {
+      const h = e.target.closest('[data-ts]'); if (!h) return;
+      const [a, b] = TCOLS[+h.dataset.ts]; st.sort = st.sort === a ? b : a;
+      const sel = $('#fsort'); if (sel) sel.value = st.sort;
+      apply();
+    });
     const so = new IntersectionObserver(ents => { if (ents[0].isIntersecting) more(); }, { rootMargin: '800px' });
     so.observe($('#sent'));
+    if (App.sel.on) App.selEnd();
     apply();
   };
 
@@ -1400,7 +1599,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <p>البيانات تُجلب تلقائياً لكل فيلم تراه على الشاشة. هذا الزر يجلبها للمكتبة كلها في الخلفية، وتحتاجه الإحصائيات والسلاسل والممثلون واللعبة. ويُحفظ كل شيء على الجهاز فيعمل بعدها دون إنترنت.</p>
       <div id="bulkPanel">${bulkPanelInner()}</div></div>
 
-    <div class="panel"><h3>💾 نسخة احتياطية لسجل المشاهدة</h3>
+    <div class="panel" style="border-color:var(--gold)"><h3>📲 نقل المكتبة كاملة إلى جهاز آخر</h3>
+      <p>ملف واحد فيه كل شيء: المكتبة، والبوسترات والتقييمات والممثلون المجلوبة، وسجل المشاهدة وقائمتي وتقييماتك، والمفتاحان. في الجهاز الآخر افتح التطبيق واضغط «استيراد المكتبة كاملة» — بلا Excel ولا جلب من جديد.</p>
+      <p class="sub">⚠️ الملف يحتوي مفتاحيك، فلا ترسله لغيرك.</p>
+      <div class="field"><button class="btn gold" id="expAll">📤 تصدير المكتبة كاملة</button>
+      <label class="btn file-btn">📥 استيراد المكتبة كاملة<input type="file" accept=".json,application/json" id="impAll"></label></div>
+      <p id="allMsg" class="sub"></p></div>
+
+    <div class="panel"><h3>💾 نسخة احتياطية لسجل المشاهدة فقط</h3>
       <p>انسخ سجل المشاهدة وقائمتي وتقييماتك لنقلها إلى جهاز آخر (iPhone ↔ iPad).</p>
       <div class="field"><button class="btn" id="expU">📤 تصدير السجل</button>
       <label class="btn file-btn">📥 استيراد سجل<input type="file" accept=".json" id="impU"></label></div></div>
@@ -1410,6 +1616,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <p class="sub">الإصدار ${VERSION}</p></div>`;
 
     $('#fileIn2').onchange = e => importFile(e.target.files[0]);
+    $('#expAll').onclick = () => exportAll();
+    $('#impAll').onchange = e => importAll(e.target.files[0]);
     $('#saveKeys').onclick = async () => {
       Settings.set('omdbKey', $('#kOmdb').value.trim()); Settings.set('tmdbKey', $('#kTmdb').value.trim());
       fatal = false;
@@ -1438,6 +1646,45 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     $('#clrUser').onclick = () => { if (!confirm('مسح سجل المشاهدة وقائمتي وتقييماتك؟ لا يمكن التراجع.')) return; for (const k2 of ['watched', 'list', 'rate', 'eps']) User[k2] = {}; saveUser(); toast('تم المسح'); };
   };
 
+  /* ---------- full library transfer between devices ---------- */
+  async function exportAll() {
+    const msg = $('#allMsg'); msg.textContent = '⏳ جاري تجهيز الملف…';
+    const meta = {}; for (const id in App.meta) if (!App.meta[id].none) meta[id] = App.meta[id];
+    const data = { app: 'cinematheque', kind: 'full', v: 2, at: Date.now(), lib: App.lib, meta, overrides: App.overrides, user: User,
+      keys: { omdb: Settings.get('omdbKey', ''), tmdb: Settings.get('tmdbKey', '') } };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const name = 'cinematheque-full-' + new Date().toISOString().slice(0, 10) + '.json';
+    const mb = (blob.size / 1048576).toFixed(1);
+    try {
+      const file = new File([blob], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'سينماتيك حمد' });
+        msg.textContent = `✔ تم (${mb} MB). افتح التطبيق في الجهاز الآخر واضغط «استيراد المكتبة كاملة».`; return;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') { msg.textContent = ''; return; } }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    msg.textContent = `✔ تم تنزيل الملف (${mb} MB) إلى «التنزيلات». أرسله إلى الجهاز الآخر عبر AirDrop أو iCloud Drive.`;
+  }
+  async function importAll(file) {
+    if (!file) return;
+    const msg = $('#allMsg'); msg.textContent = '⏳ جاري الاستيراد…';
+    try {
+      const j = JSON.parse(await file.text());
+      if (j.app !== 'cinematheque' || j.kind !== 'full' || !j.lib || !j.lib.items) throw new Error('bad');
+      if (App.lib && !confirm(`سيُستبدل محتوى المكتبة في هذا الجهاز بمحتوى الملف (${fmtNum(j.lib.items.length)} عنواناً). متابعة؟`)) { msg.textContent = ''; return; }
+      await DB.put('kv', 'library', j.lib);
+      await DB.putMany('meta', j.meta || {});
+      Object.assign(App.meta, j.meta || {});
+      App.overrides = Object.assign({}, App.overrides, j.overrides || {}); await DB.put('kv', 'overrides', App.overrides);
+      for (const k of ['watched', 'list', 'rate', 'eps', 'game']) User[k] = Object.assign({}, User[k], (j.user || {})[k] || {});
+      saveUser();
+      if (j.keys) { if (j.keys.omdb) Settings.set('omdbKey', j.keys.omdb); if (j.keys.tmdb) Settings.set('tmdbKey', j.keys.tmdb); }
+      setLibrary(j.lib);
+      toast(`✔ تم استيراد ${fmtNum(j.lib.items.length)} عنواناً مع بياناتها`);
+      route();
+    } catch (e) { console.error(e); msg.textContent = 'الملف غير صالح — استخدم ملف «تصدير المكتبة كاملة».'; }
+  }
+
   /* ---------- boot ---------- */
   async function boot() {
     try {
@@ -1447,6 +1694,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     } catch (e) { console.error(e); }
     route();
   }
+  const setHdr = () => { const t = $('.top'); if (t) document.documentElement.style.setProperty('--hdr', t.offsetHeight + 'px'); };
+  addEventListener('resize', setHdr); addEventListener('orientationchange', () => setTimeout(setHdr, 300));
+  document.addEventListener('DOMContentLoaded', () => setTimeout(setHdr, 50));
   // re-route after orientation changes so layouts recompute cleanly
   let lastW = innerWidth;
   addEventListener('resize', () => { if (Math.abs(innerWidth - lastW) > 120) { lastW = innerWidth; document.documentElement.style.width = '100%'; } });
@@ -1535,7 +1785,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     let h = `<button class="m-close" aria-label="إغلاق" data-close>✕</button>
       <div class="m-hero" style="${m && m.backdrop ? `background-image:url('${esc(m.backdrop)}')` : ''}"></div>
       <div class="m-head">
-        <div class="m-poster">${App.placeholder(it)}${m && (m.posterBig || m.poster) ? `<img src="${esc(m.posterBig || m.poster)}" alt="" style="position:relative">` : ''}</div>
+        <div class="m-poster" data-act="zoom">${App.placeholder(it)}${m && (m.posterBig || m.poster) ? `<img src="${esc(m.posterBig || m.poster)}" alt="" style="position:relative">` : ''}</div>
         <div class="m-info">
           <h2 class="m-title" dir="auto">${esc(it.title)}</h2>
           ${m && m.orig && Parser.slug(m.orig) !== Parser.slug(it.title) ? `<div class="m-orig" dir="auto">${esc(m.orig)}</div>` : ''}
@@ -1644,6 +1894,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         const m = App.m(it.id); const box = $('#trailerBox');
         box.innerHTML = box.innerHTML ? '' : `<div class="trailer"><iframe src="https://www.youtube-nocookie.com/embed/${esc(m.trailer)}?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div>`;
       } else if (a === 'fix') fixUI(it);
+      else if (a === 'zoom') { const m = App.m(it.id); if (m && (m.posterBig || m.poster)) zoom(m); }
       return;
     }
     const r = t.closest('[data-rate]');
@@ -1703,6 +1954,56 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     $('#fixGo').onclick = go; $('#fixQ').onkeydown = e => { if (e.key === 'Enter') go(); };
     go();
   }
+
+  /* ---------- full-screen poster with pinch / double-tap zoom ---------- */
+  function hiRes(m) {
+    const u = m.posterBig || m.poster;
+    if (/image\.tmdb\.org/.test(u)) return u.replace(/\/w\d+\//, '/original/');
+    if (/media-amazon\.com/.test(u)) return u.replace(/\._V1_[^/]*\.jpg$/i, '._V1_.jpg');
+    return u;
+  }
+  function zoom(m) {
+    const low = m.posterBig || m.poster, hi = hiRes(m);
+    const z = document.createElement('div'); z.className = 'zoom';
+    z.innerHTML = `<button class="z-close" aria-label="إغلاق">✕</button><img src="${esc(low)}" alt="" referrerpolicy="no-referrer"><div class="z-hint">إصبعان للتكبير · ضغطتان للتقريب · اسحب للأسفل للإغلاق</div>`;
+    document.body.appendChild(z);
+    const img = z.querySelector('img');
+    if (hi !== low) { const pre = new Image(); pre.referrerPolicy = 'no-referrer'; pre.onload = () => { img.src = hi; }; pre.src = hi; }
+    let sc = 1, tx = 0, ty = 0, start = null, moved = false, lastTap = 0;
+    const apply = (anim) => { img.style.transition = anim ? 'transform .2s' : 'none'; img.style.transform = `translate(${tx}px,${ty}px) scale(${sc})`; };
+    const shut = () => { z.style.transition = 'opacity .15s'; z.style.opacity = '0'; setTimeout(() => z.remove(), 150); };
+    z.querySelector('.z-close').onclick = e => { e.stopPropagation(); shut(); };
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    z.addEventListener('touchstart', e => {
+      moved = false;
+      if (e.touches.length === 2) start = { d: dist(e.touches), sc, tx, ty, pinch: true };
+      else start = { x: e.touches[0].clientX, y: e.touches[0].clientY, tx, ty, sc };
+    }, { passive: true });
+    z.addEventListener('touchmove', e => {
+      if (!start) return; e.preventDefault(); moved = true;
+      if (e.touches.length === 2 && start.pinch) { sc = Math.min(5, Math.max(1, start.sc * dist(e.touches) / start.d)); }
+      else if (e.touches.length === 1 && !start.pinch) {
+        const dx = e.touches[0].clientX - start.x, dy = e.touches[0].clientY - start.y;
+        if (sc > 1) { tx = start.tx + dx; ty = start.ty + dy; }
+        else { ty = Math.max(0, dy); z.style.background = `rgba(0,0,0,${0.94 - Math.min(0.6, ty / 500)})`; }
+      }
+      apply(false);
+    }, { passive: false });
+    z.addEventListener('touchend', e => {
+      if (e.touches.length) return;
+      if (sc <= 1) { if (ty > 120) { shut(); return; } sc = 1; tx = 0; ty = 0; z.style.background = ''; apply(true); }
+      const now = Date.now();
+      if (!moved) {
+        if (now - lastTap < 300) { sc = sc > 1 ? 1 : 2.5; tx = 0; ty = 0; apply(true); lastTap = 0; }
+        else { lastTap = now; setTimeout(() => { if (lastTap === now && sc === 1) shut(); }, 310); }
+      }
+      start = null;
+    });
+    // mouse / desktop: click closes, wheel zooms
+    z.addEventListener('click', e => { if (!('ontouchstart' in window) && e.target !== z.querySelector('.z-close')) shut(); });
+    z.addEventListener('wheel', e => { e.preventDefault(); sc = Math.min(5, Math.max(1, sc * (e.deltaY < 0 ? 1.15 : 0.87))); if (sc === 1) { tx = ty = 0; } apply(false); }, { passive: false });
+  }
+  App.zoomPoster = zoom;
 
   window.Details = { open, close };
 })();
