@@ -21,7 +21,7 @@
   --font: -apple-system, "SF Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);min-height:100%}
+html,body{width:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);min-height:100%}
 body{overflow-x:hidden;-webkit-text-size-adjust:100%}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;color:inherit;cursor:pointer}
@@ -336,6 +336,30 @@ body.selecting .view{padding-bottom:110px}
 .zoom .z-close{position:absolute;top:calc(12px + var(--safe-t));inset-inline-start:12px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:20px;z-index:2}
 .zoom .z-hint{position:absolute;bottom:calc(14px + var(--safe-b));color:rgba(255,255,255,.55);font-size:12px}
 .m-poster{cursor:zoom-in}
+.bdg.full{background:var(--green);color:#03281a}
+.bdg.miss{background:#f0913a;color:#2a1300}
+
+/* ---------- films per year ---------- */
+.yrs-top{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.goal-row{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.goal-row:last-child{border-bottom:0}
+.goal-row.tot{font-weight:800;color:var(--gold)}
+.goal{min-width:64px;height:30px;border-radius:8px;border:0;color:#1b1b1b;font-weight:800;font-size:14px}
+.ytbl{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:clip}
+.yhead,.yrow{display:grid;grid-template-columns:96px minmax(0,1fr) 80px;align-items:center;gap:10px;padding:0 14px}
+.yhead{position:sticky;top:var(--hdr,104px);z-index:5;background:var(--surface2);border-bottom:1px solid var(--line)}
+.yhead button{border:0;background:none;color:var(--ink2);font-weight:800;font-size:13px;padding:12px 0;text-align:center}
+.yrow{min-height:34px;border-bottom:1px solid rgba(38,44,59,.6);cursor:pointer}
+.yrow:active{background:var(--surface2)}
+.ylab{font-variant-numeric:tabular-nums;color:var(--ink2);text-align:center;font-size:14px}
+.ybar{position:relative;height:24px;border-radius:5px;background:rgba(255,255,255,.04);overflow:hidden;direction:ltr}
+.ybar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
+.ybar span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.85);font-variant-numeric:tabular-nums}
+.ymiss{text-align:center;font-variant-numeric:tabular-nums;font-size:14px}
+.ymiss.done{color:var(--green);font-weight:800}
+.ytot{cursor:default;background:var(--surface2);font-weight:800}
+.ytot .ylab,.ytot .ymiss,.ytot .ybar span{color:#ff6b6b}
+@media (max-width:600px){.yrs-top{grid-template-columns:1fr}.yhead,.yrow{grid-template-columns:62px minmax(0,1fr) 54px;gap:6px;padding:0 8px}}
 
 </style>
 </head>
@@ -615,6 +639,25 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return items;
   }
 
+  // yearly goals table on the summary sheet: column D = "1939" / "1940-1949", column E = goal per year
+  function readTargets(wb, XLSX) {
+    const ws = wb.Sheets['مجموع الأفلام'] || wb.Sheets[wb.SheetNames[0]]; if (!ws) return null;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+    const out = [];
+    for (const r of rows.slice(0, 30)) {
+      if (!r) continue;
+      for (let c = 0; c < Math.min(r.length - 1, 8); c++) {
+        const lab = norm(r[c]), val = r[c + 1];
+        if (typeof val !== 'number') continue;
+        let m = lab.match(/^((?:18|19|20)\d{2})\s*[-–]\s*((?:18|19|20)\d{2})$/);
+        if (m) { out.push({ from: +m[1], to: +m[2], goal: val }); break; }
+        m = lab.match(/^((?:18|19|20)\d{2})$/);
+        if (m && c > 1) { out.push({ from: 1900, to: +m[1], goal: val }); break; }
+      }
+    }
+    return out.length >= 3 ? out.sort((a, b) => a.from - b.from) : null;
+  }
+
   function parseWorkbook(XLSX, data, fileName) {
     const wb = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
     const items = []; const report = {};
@@ -636,7 +679,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       report[s.key] = list.length;
       items.push(...list);
     }
-    return { items, report, fileName: fileName || '', importedAt: Date.now() };
+    return { items, report, targets: readTargets(wb, XLSX), fileName: fileName || '', importedAt: Date.now() };
   }
 
   const api = { parseWorkbook, parseName, cleanTitle, slug, qualityOf };
@@ -987,7 +1030,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* سينماتيك حمد — core: state, router, home, sections, settings, background fetching */
 (function () {
   'use strict';
-  const VERSION = '1.5';
+  const VERSION = '1.6';
 
   const SECTIONS = [
     { key: 'foreign', label: 'الأفلام الأجنبية', ic: '🎞️', tv: false },
@@ -1005,6 +1048,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     { href: '#/collections', ic: '🔗', label: 'السلاسل', d: 'الأجزاء والناقص منها' },
     { href: '#/actors', ic: '👤', label: 'الممثلون والمخرجون', d: 'من مكتبتك' },
     { href: '#/game', ic: '🎮', label: 'خمّن الفيلم', d: 'لعبة البوسترات' },
+    { href: '#/years', ic: '📈', label: 'أفلام كل سنة', d: 'الموجود والهدف والناقص' },
     { href: '#/stats', ic: '📊', label: 'الإحصائيات', d: 'أرقام المكتبة' },
     { href: '#/check', ic: '🔍', label: 'فحص المكتبة', d: 'مكررات ونواقص' },
     { href: '#/settings', ic: '⚙️', label: 'الإعدادات', d: 'الملف والمفاتيح' }
@@ -1045,6 +1089,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const w = User.eps[it.id] || {}; const n = it.eps.filter(e => w[e.k]).length;
     return { n, total: it.eps.length };
   };
+  // a film needs manual matching when the lookup finished but found nothing, no official poster, or almost no data
+  App.needReason = it => {
+    const raw = App.meta[it.id]; if (!raw) return '';
+    if (raw.none) return 'لم يُعثر عليه';
+    if (!raw.poster) return 'بلا بوستر';
+    if (!(raw.imdb && raw.imdb.rating) && !raw.year && !raw.overview) return 'بيانات ناقصة';
+    return '';
+  };
+  App.needsMatch = it => !!App.needReason(it);
   App.isWatched = it => {
     if (User.watched[it.id]) return true;
     const p = App.epProgress(it); return !!(p && p.total && p.n === p.total);
@@ -1257,7 +1310,26 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   /* ---------- router ---------- */
   const Views = App.views = {};
-  function route() {
+  /* remember the scroll position of every page, restore it when coming back */
+  const scrollMem = {};
+  let restoring = false, curHash = null;
+  addEventListener('scroll', () => { if (!restoring && curHash) scrollMem[curHash] = scrollY; }, { passive: true });
+  App._more = null;
+  App.forgetScroll = h => { delete scrollMem[h]; };
+  async function restoreScroll(h, done) {
+    const y = scrollMem[h];
+    if (!y) { if (done) await done; return; }
+    restoring = true;
+    try {
+      if (done) await done;
+      let guard = 0;
+      while (document.documentElement.scrollHeight < y + innerHeight && App._more && App._more() !== false && guard++ < 200) {}
+      scrollTo(0, y);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      scrollTo(0, y);
+    } finally { restoring = false; }
+  }
+  function route(opts = {}) {
     const h = location.hash || '#/home';
     const parts = h.slice(2).split('/');
     const name = parts[0] || 'home';
@@ -1266,12 +1338,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     renderChips(name === 'sec' ? '#/sec/' + parts[1] : name === 'home' ? '#/home' : '');
     $('#btnBack').style.visibility = name === 'home' ? 'hidden' : 'visible';
     const fn = Views[name] || Views.home;
-    view.innerHTML = '';
-    window.scrollTo(0, 0);
-    fn(view, parts.slice(1).map(decodeURIComponent));
+    App._more = null; curHash = h;
+    restoring = true; view.innerHTML = ''; window.scrollTo(0, 0); restoring = false;
+    const res = fn(view, parts.slice(1).map(decodeURIComponent));
+    if (opts.restore) restoreScroll(h, res && res.then ? res : null);
+    else scrollMem[h] = 0;
   }
   App.route = route;
-  window.addEventListener('hashchange', () => { if (window.Details) Details.close(true); if (App.sel && App.sel.on) App.selEnd(); route(); });
+  window.addEventListener('hashchange', () => { if (window.Details) Details.close(true); if (App.sel && App.sel.on) App.selEnd(); route({ restore: true }); });
 
   /* ---------- welcome / import ---------- */
   function renderWelcome(view) {
@@ -1479,7 +1553,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   Views.sec = function (view, [key]) {
     const s = secOf(key); if (!s) { location.hash = '#/home'; return; }
-    const st = App.secState[key] = App.secState[key] || { q: '', sort: 'title', dec: '', qual: '', genre: '', w: 'all', view: Settings.get('view.' + key, 'grid') };
+    const st = App.secState[key] = App.secState[key] || { q: '', sort: 'title', dec: '', qual: '', genre: '', w: 'all', year: '', view: Settings.get('view.' + key, 'grid') };
+    const needN = App.items.filter(it => it.sec === key && App.needsMatch(it)).length;
     const all = App.items.filter(it => it.sec === key);
     const decades = [...new Set(all.map(it => decadeOf(App.year(it))).filter(Boolean))].sort((a, b) => b - a);
     const quals = [...new Set(all.map(it => it.quality).filter(Boolean))].sort((a, b) => (QRANK[b] || 0) - (QRANK[a] || 0));
@@ -1493,7 +1568,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         ${decades.length > 1 ? `<select id="fdec"><option value="">كل العقود</option>${decades.map(d => `<option value="${d}"${String(st.dec) === String(d) ? ' selected' : ''}>${d}s</option>`).join('')}</select>` : ''}
         ${quals.length > 1 ? `<select id="fqual"><option value="">كل الجودات</option>${quals.map(q => `<option${st.qual === q ? ' selected' : ''}>${q}</option>`).join('')}</select>` : ''}
         ${genres.length ? `<select id="fgen"><option value="">كل الأنواع</option>${genres.map(g => `<option${st.genre === g ? ' selected' : ''}>${esc(g)}</option>`).join('')}</select>` : ''}
-        <div class="seg" id="fw">${[['all', 'الكل'], ['seen', 'شاهدته'], ['unseen', 'لم أشاهده'], ['list', 'قائمتي']].map(([v, l]) => `<button data-v="${v}" class="${st.w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+        ${st.year ? `<button class="chip on" id="fyear">سنة ${st.year} ✕</button>` : ''}
+        <div class="seg" id="fw">${[['all', 'الكل'], ['seen', 'شاهدته'], ['unseen', 'لم أشاهده'], ['list', 'قائمتي']].concat(needN || st.w === 'need' ? [['need', `❓ تحتاج مطابقة (${needN})`]] : []).map(([v, l]) => `<button data-v="${v}" class="${st.w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="seg" id="fview"><button data-v="grid" class="${st.view === 'grid' ? 'on' : ''}" title="بوسترات">🔲</button><button data-v="table" class="${st.view === 'table' ? 'on' : ''}" title="جدول">📋</button></div>
         <button class="btn sm" id="btnSel">☑️ تحديد</button>
         <span class="count" id="fcount"></span>
@@ -1514,9 +1590,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       list = all.filter(it =>
         (!q || App.matchText(it, q)) &&
         (!st.dec || decadeOf(App.year(it)) === +st.dec) &&
+        (!st.year || App.year(it) === +st.year) &&
         (!st.qual || it.quality === st.qual) &&
         (!st.genre || App.genres(it).includes(st.genre)) &&
-        (st.w === 'all' || (st.w === 'seen' ? App.isWatched(it) : st.w === 'unseen' ? !App.isWatched(it) : !!User.list[it.id])));
+        (st.w === 'all' || (st.w === 'seen' ? App.isWatched(it) : st.w === 'unseen' ? !App.isWatched(it) : st.w === 'need' ? App.needsMatch(it) : !!User.list[it.id])));
       list = App.sortItems(list, st.sort);
       $('#fcount').textContent = `${fmtNum(list.length)} ${s.tv ? 'مسلسل' : 'فيلم'}`;
       const g = $('#grid');
@@ -1527,9 +1604,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       if (App.sel.on) selBar();
     }
     App._secApply = apply;
+    App._more = () => more();
     function more() {
       const g = $('#grid'); if (!g) return;
-      if (shown >= list.length) { if (!list.length) g.insertAdjacentHTML('beforeend', '<div class="empty">لا توجد نتائج</div>'); return; }
+      if (shown >= list.length) { if (!list.length && !g.querySelector('.empty')) g.insertAdjacentHTML('beforeend', '<div class="empty">لا توجد نتائج</div>'); return false; }
       const chunk = list.slice(shown, shown + STEP); shown += chunk.length;
       if (st.view === 'table') { g.insertAdjacentHTML('beforeend', chunk.map(App.row).join('')); App.observeRows(g); }
       else {
@@ -1547,6 +1625,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     $('#fw').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.w = b.dataset.v; $$('#fw button').forEach(x => x.classList.toggle('on', x === b)); apply(); };
     $('#fview').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.view = b.dataset.v; Settings.set('view.' + key, st.view); $$('#fview button').forEach(x => x.classList.toggle('on', x === b)); apply(); };
     $('#btnSel').onclick = () => (App.sel.on ? App.selEnd() : App.selStart());
+    if ($('#fyear')) $('#fyear').onclick = () => { st.year = ''; App.route(); };
     $('#grid').addEventListener('click', e => {
       const h = e.target.closest('[data-ts]'); if (!h) return;
       const [a, b] = TCOLS[+h.dataset.ts]; st.sort = st.sort === a ? b : a;
@@ -1706,7 +1785,31 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     route();
   }
   const setHdr = () => { const t = $('.top'); if (t) document.documentElement.style.setProperty('--hdr', t.offsetHeight + 'px'); };
-  addEventListener('resize', setHdr); addEventListener('orientationchange', () => setTimeout(setHdr, 300));
+  addEventListener('resize', setHdr);
+  /* iPad rotation: some browsers keep the old page width after turning the device.
+     Nudge the viewport so the layout is recomputed for the new width. */
+  let vpT = null;
+  function fixViewport() {
+    const m = document.querySelector('meta[name=viewport]'); if (!m) return;
+    const base = 'width=device-width, initial-scale=1, viewport-fit=cover';
+    m.setAttribute('content', base + ', maximum-scale=1');
+    document.documentElement.style.width = '100%';
+    void document.body.offsetWidth;
+    setTimeout(() => {
+      m.setAttribute('content', base);
+      const w = (window.visualViewport && visualViewport.width) || innerWidth;
+      // if the page still lays out narrower than the screen, force a reflow of the whole document
+      if (document.documentElement.clientWidth < w - 2) {
+        document.body.style.display = 'none'; void document.body.offsetHeight; document.body.style.display = '';
+      }
+      setHdr();
+    }, 60);
+  }
+  const onTurn = () => { clearTimeout(vpT); vpT = setTimeout(fixViewport, 250); };
+  addEventListener('orientationchange', onTurn);
+  if (window.screen && screen.orientation) screen.orientation.addEventListener('change', onTurn);
+  if (window.matchMedia) matchMedia('(orientation: landscape)').addEventListener('change', onTurn);
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (Math.abs(document.documentElement.clientWidth - visualViewport.width * visualViewport.scale) > 40) onTurn(); });
   document.addEventListener('DOMContentLoaded', () => setTimeout(setHdr, 50));
   // re-route after orientation changes so layouts recompute cleanly
   let lastW = innerWidth;
@@ -2137,18 +2240,71 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   };
 
   /* ================= COLLECTIONS ================= */
-  V.collections = function (view) {
+  const CS = { q: '', sort: Settings.get('collSort', 'name') };
+  const collCache = App.collCache = new Map();
+  let collLoading = false;
+  const collName = n => String(n || '').replace(/ Collection$/i, '').trim();
+  const collKey = n => collName(n).replace(/^the\s+/i, '').toLowerCase();
+  async function loadCollCache() {
+    if (collCache.size) return;
+    try { const all = await DB.all('coll'); for (const k in all) collCache.set(+k, all[k]); } catch (e) {}
+  }
+  V.collections = async function (view) {
+    await loadCollCache();
     const map = new Map();
     for (const it of App.items) { const m = App.m(it.id); if (m && m.coll) { if (!map.has(m.coll.id)) map.set(m.coll.id, { c: m.coll, items: [] }); map.get(m.coll.id).items.push(it); } }
-    const list = [...map.values()].sort((a, b) => b.items.length - a.items.length || a.c.name.localeCompare(b.c.name));
-    view.innerHTML = `<h1 class="page">🔗 السلاسل</h1><p class="sub">${fmtNum(list.length)} سلسلة في مكتبتك. اضغط على السلسلة لترى أجزاءها والناقص منها.</p>
+    const groups = [...map.values()];
+    view.innerHTML = `<h1 class="page">🔗 السلاسل</h1>
+      <p class="sub">${fmtNum(groups.length)} مجموعة في مكتبتك. اضغط على المجموعة لترى أجزاءها والناقص منها.</p>
       ${!Meta.keys().tmdb ? needData('السلاسل تحتاج مفتاح TMDB.') : ''}
       ${metaCount() < App.items.length * 0.6 ? `<p class="sub">💡 لاكتمال القائمة اجلب بيانات الكل من <a href="#/settings" style="color:var(--gold)">الإعدادات</a>.</p>` : ''}
-      <div class="grid">${list.map(({ c, items }) => `<a class="card" href="#/coll/${c.id}" data-nav="1"><div class="poster">
-        <div class="ph" style="background:var(--surface2)"><span class="ltr">${esc(c.name)}</span></div>
-        ${c.poster ? `<img src="${esc(c.poster)}" alt="" loading="lazy" onload="this.classList.add('ok')">` : ''}
-        <div class="badges"><span></span><span class="bdg">${items.length} عندك</span></div></div>
-        <div class="card-t ltr">${esc(c.name.replace(/ Collection$/, ''))}</div></a>`).join('')}</div>`;
+      <div class="toolbar">
+        <input type="search" id="cq" placeholder="ابحث باسم المجموعة…" value="${esc(CS.q)}">
+        <select id="csort">${[['name', 'ترتيب: افتراضي (أبجدي)'], ['count', 'ترتيب: عدد الأجزاء'], ['missing', 'ترتيب: الناقصة']].map(([v, l]) => `<option value="${v}"${CS.sort === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        <span class="count" id="ccount"></span>
+      </div>
+      <p class="sub" id="cprog"></p>
+      <div class="grid" id="cgrid"></div>`;
+    const info = g => {
+      const col = collCache.get(g.c.id);
+      if (!col) return { have: g.items.length, total: 0, miss: 0 };
+      const have = App.ownedByTmdb(col.parts).size || g.items.length;
+      return { have, total: col.parts.length, miss: Math.max(0, col.parts.length - have) };
+    };
+    function draw() {
+      const q = CS.q.trim().toLowerCase();
+      let arr = groups.filter(g => !q || collName(g.c.name).toLowerCase().includes(q));
+      const byName = (a, b) => collKey(a.c.name).localeCompare(collKey(b.c.name), 'en', { numeric: true });
+      if (CS.sort === 'count') arr.sort((a, b) => info(b).have - info(a).have || byName(a, b));
+      else if (CS.sort === 'missing') arr = arr.filter(g => info(g).miss > 0).sort((a, b) => info(b).miss - info(a).miss || byName(a, b));
+      else arr.sort(byName);
+      $('#ccount').textContent = fmtNum(arr.length) + ' مجموعة';
+      $('#cgrid').innerHTML = arr.map(g => { const c = g.c, f = info(g);
+        const badge = f.total ? `<span class="bdg ${f.miss ? 'miss' : 'full'}">${f.have} / ${f.total}</span>` : `<span class="bdg">${f.have} عندك</span>`;
+        return `<a class="card" href="#/coll/${c.id}" data-nav="1"><div class="poster">
+          <div class="ph" style="background:var(--surface2)"><span class="ltr">${esc(collName(c.name))}</span></div>
+          ${c.poster ? `<img src="${esc(c.poster)}" alt="" referrerpolicy="no-referrer" onerror="App.imgErr(this)">` : ''}
+          <div class="badges"><span></span>${badge}</div></div>
+          <div class="card-t ltr" style="text-align:right">${esc(collName(c.name))}</div>
+          <div class="card-y">${f.total ? (f.miss ? `ينقصك ${f.miss}` : 'مكتملة ✓') : ''}</div></a>`; }).join('') || '<div class="empty">لا توجد نتائج</div>';
+      if (CS.sort === 'missing' && pending().length && Meta.keys().tmdb) $('#ccount').textContent += ` · جاري حساب ${pending().length}`;
+    }
+    const pending = () => groups.filter(g => !collCache.has(g.c.id));
+    let t;
+    $('#cq').oninput = e => { clearTimeout(t); t = setTimeout(() => { CS.q = e.target.value; draw(); }, 150); };
+    $('#csort').onchange = e => { CS.sort = e.target.value; Settings.set('collSort', CS.sort); draw(); };
+    draw();
+    // fetch the full part list of every collection once (cached), so counts and "missing" are exact
+    if (Meta.keys().tmdb && pending().length && !collLoading) {
+      collLoading = true;
+      const todo = pending().map(g => g.c.id); const total = todo.length; let done = 0;
+      const prog = () => { const p = $('#cprog'); if (p) p.textContent = done < total ? `⏳ جاري جلب أجزاء المجموعات ${done}/${total}…` : ''; };
+      prog();
+      const worker = async () => { while (todo.length) { const id = todo.shift();
+        try { collCache.set(id, await Meta.collection(id)); } catch (e) {}
+        done++; prog(); if (done % 8 === 0 && location.hash === '#/collections') draw(); } };
+      Promise.all([worker(), worker(), worker()]).then(() => { collLoading = false; if (location.hash === '#/collections') { draw(); prog(); } });
+    }
   };
   V.coll = async function (view, [id]) {
     view.innerHTML = '<p class="sub">⏳ جاري التحميل…</p>';
@@ -2224,7 +2380,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* ================= LIBRARY CHECK ================= */
   V.check = function (view) {
     const tab = App._chkTab || 'dup';
-    const tabs = [['dup', '👯 المكررات'], ['subs', '💬 بلا ترجمة'], ['low', '📉 جودة منخفضة'], ['eps', '🧩 حلقات ناقصة'], ['none', '❓ بلا بيانات']];
+    const tabs = [['dup', '👯 المكررات'], ['subs', '💬 بلا ترجمة'], ['low', '📉 جودة منخفضة'], ['eps', '🧩 حلقات ناقصة'], ['none', '❓ تحتاج مطابقة']];
     const item = (it, extra) => `<div class="li" data-id="${esc(it.id)}"><div class="thumb">${App.posterInner(it)}</div>
       <div class="tx"><b dir="auto">${esc(it.title)}</b><small>${[App.year(it), App.secOf(it.sec).label, it.quality, fmtSize(it.size)].filter(Boolean).join(' · ')}</small></div><span class="end">${extra || ''}</span></div>`;
     let body = '';
@@ -2260,12 +2416,96 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       body = `<p class="sub">حلقات أو مواسم ناقصة في المسلسلات (من أرقام الحلقات، ومن عدد الحلقات الكامل في TMDB).</p><div class="list">${rows.join('') || '<div class="empty">لا نواقص 🎉</div>'}</div>`;
     } else {
-      const a = App.items.filter(it => App.meta[it.id] && App.meta[it.id].none);
-      body = `<p class="sub">${a.length} عنواناً لم يتعرّف عليها البحث التلقائي — افتح العنوان واضغط «تصحيح المطابقة».</p><div class="list">${a.map(it => item(it)).join('') || '<div class="empty">لا شيء 🎉</div>'}</div>`;
+      const a = App.items.filter(App.needsMatch).sort((x, y) => x.sec.localeCompare(y.sec) || x.title.localeCompare(y.title));
+      const by = {}; for (const it of a) { const r = App.needReason(it); by[r] = (by[r] || 0) + 1; }
+      body = `<p class="sub">${fmtNum(a.length)} عنواناً تحتاج مطابقة${Object.keys(by).length ? ' (' + Object.entries(by).map(([r, n]) => r + ': ' + n).join(' · ') + ')' : ''}. افتح العنوان واضغط «🔧 تصحيح المطابقة» واختر الصحيح.</p>
+        <div class="list">${a.map(it => item(it, `<span class="bdg">${App.needReason(it)}</span>`)).join('') || '<div class="empty">لا شيء 🎉</div>'}</div>`;
     }
     view.innerHTML = `<h1 class="page">🔍 فحص المكتبة</h1>
       <div class="tabs">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-t="${k}">${l}</button>`).join('')}</div>${body}`;
     view.querySelector('.tabs').onclick = e => { const b = e.target.closest('[data-t]'); if (b) { App._chkTab = b.dataset.t; App.route(); } };
+  };
+
+  /* ================= FILMS PER YEAR (goals, like the Excel summary sheet) ================= */
+  const DEFAULT_GOALS = [
+    { from: 1900, to: 1939, goal: 5 }, { from: 1940, to: 1949, goal: 10 }, { from: 1950, to: 1959, goal: 15 },
+    { from: 1960, to: 1969, goal: 15 }, { from: 1970, to: 1979, goal: 30 }, { from: 1980, to: 1989, goal: 40 },
+    { from: 1990, to: 1999, goal: 50 }, { from: 2000, to: 2009, goal: 100 }, { from: 2010, to: 2019, goal: 260 },
+    { from: 2020, to: 2025, goal: 200 }];
+  const BAND_COLORS = ['#F4D9CF', '#9AE09A', '#E8C9EE', '#CFCFCF', '#CFE6F6', '#EF8C8C', '#F6F6A0', '#CDB8F6', '#F5C366', '#94CBF3'];
+  const YS = { mode: 'year', sort: 'year-d' };
+  const goals = () => Settings.get('goals', null) || (App.lib && App.lib.targets) || DEFAULT_GOALS;
+  function bandOf(y, g) { let i = g.findIndex(b => y >= b.from && y <= b.to); if (i < 0) i = y < g[0].from ? 0 : g.length - 1; return i; }
+  function openYear(y, dec) {
+    const st = App.secState.foreign || (App.secState.foreign = { q: '', sort: 'title', dec: '', qual: '', genre: '', w: 'all', year: '', view: Settings.get('view.foreign', 'grid') });
+    st.year = y || ''; st.dec = dec || ''; st.q = ''; st.w = 'all';
+    App.forgetScroll('#/sec/foreign');
+    location.hash = '#/sec/foreign';
+  }
+  V.years = function (view) {
+    const g = goals();
+    const counts = {}; let minY = 9999, maxY = 0;
+    for (const it of App.items) if (it.sec === 'foreign' && it.year) { counts[it.year] = (counts[it.year] || 0) + 1; minY = Math.min(minY, it.year); maxY = Math.max(maxY, it.year); }
+    maxY = Math.max(maxY, g[g.length - 1].to > new Date().getFullYear() ? new Date().getFullYear() : g[g.length - 1].to);
+    const startY = Math.max(minY, g[0].to <= minY ? minY : Math.min(minY, g[0].to));
+    let rows = [];
+    for (let y = maxY; y >= startY; y--) { const b = bandOf(y, g); const goal = g[b].goal; const n = counts[y] || 0; rows.push({ key: y, label: String(y), n, goal, miss: goal - n, band: b }); }
+    if (YS.mode === 'dec') {
+      const by = new Map();
+      for (const r of rows) { const d = Math.floor(r.key / 10) * 10; const k = d <= 1930 ? 1930 : d;
+        if (!by.has(k)) by.set(k, { key: k, label: k <= 1930 ? '≤1939' : k + 's', n: 0, goal: 0, miss: 0, band: r.band });
+        const o = by.get(k); o.n += r.n; o.goal += r.goal; o.miss += r.miss; }
+      rows = [...by.values()];
+    }
+    const s = { 'year-d': (a, b) => b.key - a.key, 'year-a': (a, b) => a.key - b.key, 'n-d': (a, b) => b.n - a.n || b.key - a.key, 'n-a': (a, b) => a.n - b.n || b.key - a.key, 'm-d': (a, b) => b.miss - a.miss || b.key - a.key, 'm-a': (a, b) => a.miss - b.miss || b.key - a.key }[YS.sort];
+    rows.sort(s);
+    const totN = rows.reduce((t, r) => t + r.n, 0), totMiss = rows.reduce((t, r) => t + r.miss, 0), totGoal = rows.reduce((t, r) => t + r.goal, 0);
+    const best = rows.slice().sort((a, b) => b.n - a.n)[0];
+    const secs = [['الأفلام الأجنبية', 'foreign'], ['أفلام الأطفال', 'kids'], ['المدبلج', 'dubbed'], ['إصدارات جديدة', 'new'], ['الأفلام العربية', 'arabic'], ['المسلسلات', 'series'], ['كرتون عربي قديم', 'cartoon']]
+      .map(([l, k]) => [l, App.items.filter(it => it.sec === k).length, k]);
+    const arrow = (a, b) => YS.sort === a ? ' ▼' : YS.sort === b ? ' ▲' : '';
+    view.innerHTML = `<h1 class="page">📈 أفلام كل سنة</h1>
+      <p class="sub">الأفلام الأجنبية فقط · الهدف لكل سنة حسب عقدها · N = الناقص حتى الهدف</p>
+      <div class="stat-row">
+        <div class="stat"><div class="v">${fmtNum(totN)}</div><div class="l">الموجود</div></div>
+        <div class="stat"><div class="v">${fmtNum(totGoal)}</div><div class="l">الهدف</div></div>
+        <div class="stat"><div class="v" style="color:#ff6b6b">${fmtNum(totMiss)}</div><div class="l">الناقص (N)</div></div>
+        <div class="stat"><div class="v">${totGoal ? Math.round(Math.min(totN, totGoal) / totGoal * 100) : 0}%</div><div class="l">الإنجاز</div></div>
+        ${best ? `<div class="stat"><div class="v">${esc(best.label)}</div><div class="l">الأكثر أفلاماً (${best.n})</div></div>` : ''}
+      </div>
+      <div class="yrs-top">
+        <div class="panel yr-goals"><h3>🎯 الهدف لكل سنة <small class="sub">(اضغط الرقم لتعديله)</small></h3>
+          ${g.map((b, i) => `<div class="goal-row"><span>${b.from <= 1900 ? b.to : b.from + '-' + b.to}</span><button class="goal" data-gi="${i}" style="background:${BAND_COLORS[i % BAND_COLORS.length]}">${b.goal}</button></div>`).join('')}
+          ${Settings.get('goals', null) ? '<button class="btn sm" id="gReset" style="margin-top:8px">↺ استرجاع أهداف ملف Excel</button>' : ''}</div>
+        <div class="panel yr-secs"><h3>📁 مجموع الأقسام</h3>
+          ${secs.map(([l, n, k]) => `<a class="goal-row" href="#/sec/${k}"><span>${l}</span><b>${fmtNum(n)}</b></a>`).join('')}
+          <div class="goal-row tot"><span>المجموع</span><b>${fmtNum(App.items.length)}</b></div></div>
+      </div>
+      <div class="toolbar"><div class="seg" id="ymode"><button data-v="year" class="${YS.mode === 'year' ? 'on' : ''}">حسب السنة</button><button data-v="dec" class="${YS.mode === 'dec' ? 'on' : ''}">حسب العقد</button></div>
+        <span class="count">اضغط على ${YS.mode === 'year' ? 'السنة' : 'العقد'} لعرض أفلامها</span></div>
+      <div class="ytbl">
+        <div class="yhead"><button data-ys="year">${YS.mode === 'year' ? 'السنة' : 'العقد'}${arrow('year-d', 'year-a')}</button><button data-ys="n">العدد${arrow('n-d', 'n-a')}</button><button data-ys="m">N${arrow('m-d', 'm-a')}</button></div>
+        ${rows.map(r => { const pct = r.goal ? Math.min(100, r.n / r.goal * 100) : 0;
+          return `<div class="yrow" data-y="${r.key}" title="${esc(r.label)}: ${r.n} من ${r.goal}">
+            <div class="ylab ltr">${esc(r.label)}</div>
+            <div class="ybar"><i style="width:${pct.toFixed(1)}%;background:${BAND_COLORS[r.band % BAND_COLORS.length]}"></i><span>${fmtNum(r.n)}</span></div>
+            <div class="ymiss${r.miss <= 0 ? ' done' : ''}">${fmtNum(r.miss)}</div></div>`; }).join('')}
+        <div class="yrow ytot"><div class="ylab">المجموع</div><div class="ybar"><span>${fmtNum(totN)}</span></div><div class="ymiss">${fmtNum(totMiss)}</div></div>
+      </div>`;
+    $('#ymode').onclick = e => { const b = e.target.closest('[data-v]'); if (!b) return; YS.mode = b.dataset.v; App.route(); };
+    view.querySelector('.yhead').onclick = e => { const b = e.target.closest('[data-ys]'); if (!b) return;
+      const k = b.dataset.ys, d = k === 'year' ? ['year-d', 'year-a'] : k === 'n' ? ['n-d', 'n-a'] : ['m-d', 'm-a'];
+      YS.sort = YS.sort === d[0] ? d[1] : d[0]; App.route(); };
+    view.querySelector('.ytbl').addEventListener('click', e => { const r = e.target.closest('.yrow[data-y]'); if (!r) return;
+      const y = +r.dataset.y; if (YS.mode === 'year') openYear(y); else openYear('', y <= 1930 ? '' : y); });
+    view.querySelector('.yr-goals').addEventListener('click', e => {
+      if (e.target.id === 'gReset') { Settings.set('goals', null); App.route(); return; }
+      const b = e.target.closest('[data-gi]'); if (!b) return;
+      const gg = goals().map(x => ({ ...x })); const i = +b.dataset.gi;
+      const v = prompt('الهدف لكل سنة في ' + (gg[i].from <= 1900 ? gg[i].to : gg[i].from + '-' + gg[i].to), gg[i].goal);
+      if (v == null || isNaN(+v) || +v < 0) return;
+      gg[i].goal = Math.round(+v); Settings.set('goals', gg); App.route();
+    });
   };
 
   /* ================= STATISTICS ================= */
