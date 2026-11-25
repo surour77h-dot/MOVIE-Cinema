@@ -21,8 +21,9 @@
   --font: -apple-system, "SF Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{overflow-x:hidden}
 html,body{width:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);min-height:100%}
-body{overflow-x:hidden;-webkit-text-size-adjust:100%}
+body{overflow-x:clip;max-width:100vw;-webkit-text-size-adjust:100%}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;color:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:16px}
@@ -360,6 +361,14 @@ body.selecting .view{padding-bottom:110px}
 .ytot{cursor:default;background:var(--surface2);font-weight:800}
 .ytot .ylab,.ytot .ymiss,.ytot .ybar span{color:#ff6b6b}
 @media (max-width:600px){.yrs-top{grid-template-columns:1fr}.yhead,.yrow{grid-template-columns:62px minmax(0,1fr) 54px;gap:6px;padding:0 8px}}
+.watched-ov{flex-direction:column;align-items:center;gap:6px}
+.rate-me{pointer-events:auto;background:#f5c518;color:#000;font-weight:800;font-size:12px;padding:4px 10px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+.rate-me.sm{display:inline-block;margin-top:4px;font-size:10.5px;padding:2px 7px}
+.trate .mine{font-size:11px;color:var(--green);font-weight:700;margin-top:3px}
+.my-imdb{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.my-imdb b{font-size:22px}
+.watched-ov{justify-content:flex-end}
+.watched-ov .rate-me{background:#f5c518;color:#000;font-size:12px;padding:4px 10px}
 
 </style>
 </head>
@@ -738,8 +747,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* ---- user state (watched, watchlist, ratings, episode progress, game) ---- */
   const UKEY = 'cin.user.v1';
   function loadUser() {
-    try { return Object.assign({ watched: {}, list: {}, rate: {}, eps: {}, game: {} }, JSON.parse(localStorage.getItem(UKEY) || '{}')); }
-    catch (e) { return { watched: {}, list: {}, rate: {}, eps: {}, game: {} }; }
+    const base = () => ({ watched: {}, list: {}, rate: {}, eps: {}, game: {}, removed: {}, edits: {}, myRate: {}, imdbR: {}, imdbAt: 0 });
+    try { return Object.assign(base(), JSON.parse(localStorage.getItem(UKEY) || '{}')); }
+    catch (e) { return base(); }
   }
   const User = loadUser();
   let saveT = null;
@@ -1030,7 +1040,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* سينماتيك حمد — core: state, router, home, sections, settings, background fetching */
 (function () {
   'use strict';
-  const VERSION = '1.6';
+  const VERSION = '1.7';
 
   const SECTIONS = [
     { key: 'foreign', label: 'الأفلام الأجنبية', ic: '🎞️', tv: false },
@@ -1143,7 +1153,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return `<div class="badges">${r || '<span></span>'}${l}</div>`;
   }
   function overlay(it) {
-    if (App.isWatched(it)) return '<div class="watched-ov"><span>✓ شاهدته</span></div>';
+    if (App.isWatched(it)) {
+      const r = App.myRating(it);
+      return `<div class="watched-ov">${App.needsRating(it) ? '<span class="rate-me" role="link" data-rateimdb="1">⭐ قيّمه</span>' : ''}<span>✓ شاهدته${r ? ` · ${r}★` : ''}</span></div>`;
+    }
     const p = App.epProgress(it);
     if (p && p.n) return `<div class="prog"><i style="width:${(p.n / p.total * 100).toFixed(1)}%"></i></div>`;
     return '';
@@ -1308,6 +1321,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if (c && !e.target.closest('.search-results') && !c.dataset.nav) { e.preventDefault(); Details.open(c.dataset.id || c.dataset.open); }
   });
 
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-rateimdb]'); if (!b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const host = b.closest('[data-id]'); const it = host && App.byId[host.dataset.id]; if (!it) return;
+    window.open(App.imdbUrl(it), '_blank', 'noopener');
+  }, true);
+
   /* ---------- router ---------- */
   const Views = App.views = {};
   /* remember the scroll position of every page, restore it when coming back */
@@ -1380,9 +1400,87 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
   App.importFile = importFile;
   function setLibrary(lib) {
-    App.lib = lib; App.items = lib.items; App.byId = {};
+    App.lib = lib; App.byId = {};
     for (const it of lib.items) App.byId[it.id] = it;
+    App.applyEdits(); App.applyRemoved();
   }
+  App.setLibrary = setLibrary;
+  // films removed by the user stay hidden everywhere (also after a new Excel upload)
+  App.applyRemoved = () => { App.items = App.lib ? App.lib.items.filter(it => !User.removed[it.id]) : []; };
+  // user renames: keep the original once, apply the edited title / year
+  App.applyEdits = () => {
+    if (!App.lib) return;
+    for (const it of App.lib.items) {
+      const e = User.edits[it.id];
+      if (e) {
+        if (it.origTitle === undefined) { it.origTitle = it.title; it.origYear = it.year; }
+        it.title = e.title || it.origTitle; it.year = e.year === undefined ? it.origYear : e.year;
+      } else if (it.origTitle !== undefined) { it.title = it.origTitle; it.year = it.origYear; delete it.origTitle; delete it.origYear; }
+    }
+  };
+  App.removeItems = ids => {
+    for (const id of ids) User.removed[id] = Date.now();
+    saveUser(); App.applyRemoved();
+  };
+  App.restoreItem = id => { delete User.removed[id]; saveUser(); App.applyRemoved(); };
+
+  /* ---------- my IMDb ratings (imported from IMDb's ratings.csv) ---------- */
+  App.myRating = it => {
+    const r = User.myRate[it.id]; if (r) return r;
+    const m = App.m(it.id); return m && m.imdbId && User.imdbR[m.imdbId] ? User.imdbR[m.imdbId].r : 0;
+  };
+  App.needsRating = it => !!User.imdbAt && it.type !== 'collection' && App.isWatched(it) && !App.myRating(it);
+  App.imdbUrl = it => { const m = App.m(it.id); return m && m.imdbId ? `https://www.imdb.com/title/${m.imdbId}/` : `https://www.imdb.com/find/?q=${encodeURIComponent(it.title + (App.year(it) ? ' ' + App.year(it) : ''))}`; };
+  function parseCSV(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows.filter(r => r.length > 1);
+  }
+  App.importImdb = async function (file) {
+    const text = (await file.text()).replace(/^\uFEFF/, '');
+    const rows = parseCSV(text); if (rows.length < 2) throw new Error('empty');
+    const h = rows[0].map(x => x.trim().toLowerCase());
+    const ci = n => h.findIndex(x => x === n);
+    const cConst = ci('const'), cRate = ci('your rating'), cDate = h.findIndex(x => x === 'date rated' || x === 'created' || x === 'date added');
+    const cTitle = ci('title'), cYear = ci('year'), cType = ci('title type');
+    if (cConst < 0) throw new Error('not-imdb');
+    const isRatings = cRate >= 0;
+    // index of the library: IMDb id -> items, and title|year -> items
+    const byTT = new Map(), byName = new Map();
+    for (const it of App.items) {
+      const m = App.m(it.id);
+      if (m && m.imdbId) { if (!byTT.has(m.imdbId)) byTT.set(m.imdbId, []); byTT.get(m.imdbId).push(it); }
+      const y = App.year(it);
+      for (const t of [it.title, m && m.title, m && m.orig]) if (t) { const k = Parser.slug(t) + '|' + (y || ''); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(it); }
+    }
+    let matched = 0, missing = 0; const seen = new Set();
+    if (isRatings) { User.imdbR = {}; User.myRate = {}; User.rate = {}; }
+    for (const r of rows.slice(1)) {
+      const tt = (r[cConst] || '').trim(); if (!/^tt\d+/.test(tt)) continue;
+      const title = cTitle >= 0 ? r[cTitle] : '', year = cYear >= 0 ? parseInt(r[cYear], 10) || '' : '';
+      const d = cDate >= 0 ? Date.parse(r[cDate]) || Date.now() : Date.now();
+      const its = byTT.get(tt) || byName.get(Parser.slug(title) + '|' + year) || [];
+      if (isRatings) {
+        const v = parseInt(r[cRate], 10); if (!v) continue;
+        User.imdbR[tt] = { r: v, d };
+        for (const it of its) { User.myRate[it.id] = v; if (!App.isWatched(it)) { if (it.eps) App.setWatched(it, true); User.watched[it.id] = User.watched[it.id] || d; } }
+      } else {
+        for (const it of its) User.list[it.id] = User.list[it.id] || d;
+      }
+      if (its.length) { matched++; for (const it of its) seen.add(it.id); } else missing++;
+    }
+    if (isRatings) User.imdbAt = Date.now();
+    saveUser();
+    return { kind: isRatings ? 'ratings' : 'watchlist', matched, missing, items: seen.size };
+  };
 
   /* ---------- HOME ---------- */
   Views.home = function (view) {
@@ -1472,7 +1570,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <button class="tchk${w ? ' on' : ''}" data-tw="1" aria-label="شاهدته">${w ? '✓' : ''}</button>
       <div class="tname"><span class="tthumb">${m && m.poster ? `<img src="${esc(m.poster)}" alt="" referrerpolicy="no-referrer" onerror="App.imgErr(this)">` : ''}</span><span dir="auto">${esc(it.title)}</span></div>
       <div class="tdate">${fmtDate(it)}</div>
-      <div class="trate">${rt ? `<span class="bdg rate">★ ${rt.toFixed(1)}</span>` : '<span class="muted">—</span>'}</div>
+      <div class="trate">${rt ? `<span class="bdg rate">★ ${rt.toFixed(1)}</span>` : '<span class="muted">—</span>'}${App.myRating(it) ? `<div class="mine">أنا ${App.myRating(it)}</div>` : App.needsRating(it) ? '<span class="rate-me sm" role="link" data-rateimdb="1">⭐ قيّمه</span>' : ''}</div>
       <div class="trun">${fmtRun(it)}</div></div>`;
   };
   App.observeRows = root => { if (!io) return; for (const el of $$('.trow', root)) if (!App.meta[el.dataset.id] && Meta.hasKeys()) { el.dataset.need = '1'; io.observe(el); } };
@@ -1489,6 +1587,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <button class="btn sm gold" data-sa="seen"${n ? '' : ' disabled'}>✓ شاهدته</button>
       <button class="btn sm" data-sa="unseen"${n ? '' : ' disabled'}>إلغاء المشاهدة</button>
       <button class="btn sm" data-sa="list"${n ? '' : ' disabled'}>➕ قائمتي</button>
+      <button class="btn sm" data-sa="unlist"${n ? '' : ' disabled'}>➖ من قائمتي</button>
+      <button class="btn sm red" data-sa="del"${n ? '' : ' disabled'}>🗑️ حذف</button>
       <button class="btn sm" data-sa="all">تحديد الكل الظاهر (${fmtNum(App.sel.visible().length)})</button>
       <button class="btn sm red" data-sa="cancel">إلغاء</button>`;
   }
@@ -1518,14 +1618,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       $$('.card[data-id], .trow[data-id]', $('#view')).forEach(el => el.classList.toggle('sel', App.sel.ids.has(el.dataset.id)));
       selBar(); return;
     }
+    if (a === 'del') {
+      if (!confirm(`حذف ${ids.length} من المكتبة؟\nتُحذف من التطبيق فقط (لا من الـ Excel ولا من جهازك)، ويمكن إرجاعها من الإعدادات ← الأفلام المحذوفة.`)) return;
+      App.removeItems(ids); toast(`🗑️ حُذف ${ids.length} من المكتبة`); App.selEnd(); if (App._secApply) App._secApply(true); return;
+    }
     for (const id of ids) {
       const it = App.byId[id]; if (!it) continue;
+      if (a === 'unlist') { delete User.list[id]; continue; }
       if (a === 'seen' && !App.isWatched(it)) App.setWatched(it, true);
       else if (a === 'unseen' && App.isWatched(it)) App.setWatched(it, false);
       else if (a === 'list') User.list[id] = User.list[id] || Date.now();
     }
     saveUser();
-    toast(a === 'seen' ? `✓ تم تعليم ${ids.length} كمشاهَد` : a === 'unseen' ? `أُلغيت المشاهدة عن ${ids.length}` : `أُضيف ${ids.length} إلى قائمتي`);
+    toast(a === 'seen' ? `✓ تم تعليم ${ids.length} كمشاهَد` : a === 'unseen' ? `أُلغيت المشاهدة عن ${ids.length}` : a === 'unlist' ? `أُزيل ${ids.length} من قائمتي` : `أُضيف ${ids.length} إلى قائمتي`);
     App.selEnd();
     if (App._secApply) App._secApply(true);
   });
@@ -1555,7 +1660,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const s = secOf(key); if (!s) { location.hash = '#/home'; return; }
     const st = App.secState[key] = App.secState[key] || { q: '', sort: 'title', dec: '', qual: '', genre: '', w: 'all', year: '', view: Settings.get('view.' + key, 'grid') };
     const needN = App.items.filter(it => it.sec === key && App.needsMatch(it)).length;
-    const all = App.items.filter(it => it.sec === key);
+    const rateN = User.imdbAt ? App.items.filter(it => it.sec === key && App.needsRating(it)).length : 0;
+    let all = App.items.filter(it => it.sec === key);
     const decades = [...new Set(all.map(it => decadeOf(App.year(it))).filter(Boolean))].sort((a, b) => b - a);
     const quals = [...new Set(all.map(it => it.quality).filter(Boolean))].sort((a, b) => (QRANK[b] || 0) - (QRANK[a] || 0));
     const genres = [...new Set(all.flatMap(App.genres))].sort((a, b) => a.localeCompare(b, 'ar'));
@@ -1569,7 +1675,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         ${quals.length > 1 ? `<select id="fqual"><option value="">كل الجودات</option>${quals.map(q => `<option${st.qual === q ? ' selected' : ''}>${q}</option>`).join('')}</select>` : ''}
         ${genres.length ? `<select id="fgen"><option value="">كل الأنواع</option>${genres.map(g => `<option${st.genre === g ? ' selected' : ''}>${esc(g)}</option>`).join('')}</select>` : ''}
         ${st.year ? `<button class="chip on" id="fyear">سنة ${st.year} ✕</button>` : ''}
-        <div class="seg" id="fw">${[['all', 'الكل'], ['seen', 'شاهدته'], ['unseen', 'لم أشاهده'], ['list', 'قائمتي']].concat(needN || st.w === 'need' ? [['need', `❓ تحتاج مطابقة (${needN})`]] : []).map(([v, l]) => `<button data-v="${v}" class="${st.w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="seg" id="fw">${[['all', 'الكل'], ['seen', 'شاهدته'], ['unseen', 'لم أشاهده'], ['list', 'قائمتي']].concat(rateN || st.w === 'rate' ? [['rate', `⭐ يحتاج تقييمي (${rateN})`]] : []).concat(needN || st.w === 'need' ? [['need', `❓ تحتاج مطابقة (${needN})`]] : []).map(([v, l]) => `<button data-v="${v}" class="${st.w === v ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="seg" id="fview"><button data-v="grid" class="${st.view === 'grid' ? 'on' : ''}" title="بوسترات">🔲</button><button data-v="table" class="${st.view === 'table' ? 'on' : ''}" title="جدول">📋</button></div>
         <button class="btn sm" id="btnSel">☑️ تحديد</button>
         <span class="count" id="fcount"></span>
@@ -1586,6 +1692,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     }
     function apply(keepScroll) {
       const y = scrollY;
+      all = App.items.filter(it => it.sec === key);
       const q = Parser.slug(st.q);
       list = all.filter(it =>
         (!q || App.matchText(it, q)) &&
@@ -1593,7 +1700,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         (!st.year || App.year(it) === +st.year) &&
         (!st.qual || it.quality === st.qual) &&
         (!st.genre || App.genres(it).includes(st.genre)) &&
-        (st.w === 'all' || (st.w === 'seen' ? App.isWatched(it) : st.w === 'unseen' ? !App.isWatched(it) : st.w === 'need' ? App.needsMatch(it) : !!User.list[it.id])));
+        (st.w === 'all' || (st.w === 'seen' ? App.isWatched(it) : st.w === 'unseen' ? !App.isWatched(it) : st.w === 'need' ? App.needsMatch(it) : st.w === 'rate' ? App.needsRating(it) : !!User.list[it.id])));
       list = App.sortItems(list, st.sort);
       $('#fcount').textContent = `${fmtNum(list.length)} ${s.tv ? 'مسلسل' : 'فيلم'}`;
       const g = $('#grid');
@@ -1641,16 +1748,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* ---------- MY LIST ---------- */
   Views.mylist = function (view) {
     const tab = App._mlTab || 'list';
-    const tabs = [['list', '📌 قائمتي'], ['seen', '✅ شاهدته'], ['prog', '▶️ قيد المشاهدة'], ['rated', '⭐ قيّمتها']];
+    const needR = App.items.filter(App.needsRating);
+    const tabs = [['list', '📌 قائمتي'], ['seen', '✅ شاهدته'], ['prog', '▶️ قيد المشاهدة'], ['rated', '⭐ قيّمتها في IMDb'], ['needrate', `⭐ يحتاج تقييمي (${needR.length})`]];
     let arr;
     if (tab === 'list') arr = App.items.filter(it => User.list[it.id]).sort((a, b) => User.list[b.id] - User.list[a.id]);
     else if (tab === 'seen') arr = App.items.filter(App.isWatched).sort((a, b) => (User.watched[b.id] || 0) - (User.watched[a.id] || 0));
     else if (tab === 'prog') arr = App.items.filter(it => it.eps && !App.isWatched(it) && App.epProgress(it).n);
-    else arr = App.items.filter(it => User.rate[it.id]).sort((a, b) => User.rate[b.id] - User.rate[a.id]);
+    else if (tab === 'needrate') arr = needR.sort((a, b) => (User.watched[b.id] || 0) - (User.watched[a.id] || 0));
+    else arr = App.items.filter(it => App.myRating(it)).sort((a, b) => App.myRating(b) - App.myRating(a));
     view.innerHTML = `<h1 class="page">✅ سجل المشاهدة</h1>
-      <p class="sub">شاهدت ${fmtNum(App.items.filter(App.isWatched).length)} عنواناً من ${fmtNum(App.items.length)}</p>
+      <p class="sub">شاهدت ${fmtNum(App.items.filter(App.isWatched).length)} عنواناً من ${fmtNum(App.items.length)}${User.imdbAt ? ` · آخر استيراد من IMDb ${new Date(User.imdbAt).toLocaleDateString('ar-u-nu-latn')}` : ' · لاستيراد تقييماتك من IMDb: ⚙️ الإعدادات'}</p>
+      ${tab === 'needrate' && !User.imdbAt ? '<div class="panel"><p>يظهر هنا ما شاهدته ولم تقيّمه في IMDb، بعد استيراد ملف ratings.csv من ⚙️ الإعدادات.</p></div>' : ''}
       <div class="tabs">${tabs.map(([k, l]) => `<button class="chip${k === tab ? ' on' : ''}" data-t="${k}">${l}</button>`).join('')}</div>
-      <div class="grid">${arr.length ? arr.map(it => App.card(it, tab === 'rated' ? { sub: '⭐ تقييمي ' + User.rate[it.id] + '/10' } : tab === 'prog' ? { sub: App.epProgress(it).n + '/' + it.eps.length + ' حلقة' } : {})).join('') : '<div class="empty">لا شيء هنا بعد</div>'}</div>`;
+      <div class="grid">${arr.length ? arr.map(it => App.card(it, tab === 'rated' ? { sub: '⭐ تقييمي ' + App.myRating(it) + '/10' } : tab === 'prog' ? { sub: App.epProgress(it).n + '/' + it.eps.length + ' حلقة' } : {})).join('') : '<div class="empty">لا شيء هنا بعد</div>'}</div>`;
     view.querySelector('.tabs').onclick = e => { const b = e.target.closest('[data-t]'); if (b) { App._mlTab = b.dataset.t; route(); } };
     App.observeCards(view);
   };
@@ -1689,17 +1799,24 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <p>البيانات تُجلب تلقائياً لكل فيلم تراه على الشاشة. هذا الزر يجلبها للمكتبة كلها في الخلفية، وتحتاجه الإحصائيات والسلاسل والممثلون واللعبة. ويُحفظ كل شيء على الجهاز فيعمل بعدها دون إنترنت.</p>
       <div id="bulkPanel">${bulkPanelInner()}</div></div>
 
-    <div class="panel" style="border-color:var(--gold)"><h3>📲 نقل المكتبة كاملة إلى جهاز آخر</h3>
-      <p>ملف واحد فيه كل شيء: المكتبة، والبوسترات والتقييمات والممثلون المجلوبة، وسجل المشاهدة وقائمتي وتقييماتك، والمفتاحان. في الجهاز الآخر افتح التطبيق واضغط «استيراد المكتبة كاملة» — بلا Excel ولا جلب من جديد.</p>
+    <div class="panel" style="border-color:#f5c518"><h3><span class="imdb-logo">IMDb</span> استيراد تقييماتك وقائمة المشاهدة</h3>
+      <p>من موقع IMDb في المتصفح (نسخة سطح المكتب): <b>Your ratings ← ⋯ ← Export</b> لملف <b class="ltr">ratings.csv</b>، و<b>Your watchlist ← ⋯ ← Export</b> لملف <b class="ltr">watchlist.csv</b>. ثم اختر الملف هنا.</p>
+      <p class="sub">يضيف فقط ولا يحذف أي فيلم: ما قيّمته ويوجد في مكتبتك يُعلَّم «شاهدته» مع تقييمك، وقائمة المشاهدة تُضاف إلى «قائمتي». 💡 اضغط «جلب بيانات الكل» قبلها لمطابقة أدق.</p>
+      ${User.imdbAt ? `<p>آخر استيراد للتقييمات: <b>${new Date(User.imdbAt).toLocaleDateString('ar-u-nu-latn')}</b> · ${fmtNum(Object.keys(User.imdbR).length)} تقييماً في الملف · مطابَقة في مكتبتك: <b>${fmtNum(App.items.filter(it => App.myRating(it)).length)}</b> · يحتاج تقييمك: <b>${fmtNum(App.items.filter(App.needsRating).length)}</b></p>` : ''}
+      <div class="field"><label class="btn gold file-btn">📥 استيراد من IMDb (CSV)<input type="file" accept=".csv,text/csv" id="impImdb"></label></div>
+      <p id="imdbMsg" class="sub"></p></div>
+
+    <div class="panel" style="border-color:var(--gold)"><h3>📲 نسخ احتياطي ونقل بين الأجهزة</h3>
+      <p>ملف واحد فيه كل شيء: المكتبة، والبوسترات والتقييمات والممثلون، وسجل المشاهدة وقائمتي وتقييماتك من IMDb، والأسماء المعدّلة والأفلام المحذوفة، والمفتاحان. الاستيراد يدمج سجل المشاهدة مع الموجود ولا يمسحه.</p>
       <p class="sub">⚠️ الملف يحتوي مفتاحيك، فلا ترسله لغيرك.</p>
-      <div class="field"><button class="btn gold" id="expAll">📤 تصدير المكتبة كاملة</button>
-      <label class="btn file-btn">📥 استيراد المكتبة كاملة<input type="file" accept=".json,application/json" id="impAll"></label></div>
+      <div class="field"><button class="btn gold" id="expAll">📤 تصدير</button>
+      <label class="btn file-btn">📥 استيراد<input type="file" accept=".json,application/json" id="impAll"></label></div>
       <p id="allMsg" class="sub"></p></div>
 
-    <div class="panel"><h3>💾 نسخة احتياطية لسجل المشاهدة فقط</h3>
-      <p>انسخ سجل المشاهدة وقائمتي وتقييماتك لنقلها إلى جهاز آخر (iPhone ↔ iPad).</p>
-      <div class="field"><button class="btn" id="expU">📤 تصدير السجل</button>
-      <label class="btn file-btn">📥 استيراد سجل<input type="file" accept=".json" id="impU"></label></div></div>
+    <div class="panel"><h3>🗑️ الأفلام المحذوفة (${fmtNum(Object.keys(User.removed).length)})</h3>
+      ${Object.keys(User.removed).length ? `<div class="list">${Object.keys(User.removed).sort((x, y) => User.removed[y] - User.removed[x]).map(id => { const it = App.byId[id]; if (!it) return '';
+        return `<div class="li" data-nav="1"><div class="thumb">${App.posterInner(it)}</div><div class="tx"><b dir="auto">${esc(it.title)}</b><small>${[App.year(it), secOf(it.sec).label].filter(Boolean).join(' · ')}</small></div><button class="btn sm" data-restore="${esc(id)}">↩️ إرجاع</button></div>`; }).join('')}</div>`
+        : '<p class="sub">لا توجد أفلام محذوفة. للحذف: افتح الفيلم ← «🗑️ حذف من المكتبة»، أو «☑️ تحديد» ← «🗑️ حذف».</p>'}</div>
 
     <div class="panel"><h3>🧹 أخرى</h3>
       <div class="field"><button class="btn red" id="clrMeta">مسح بيانات الأفلام المحمّلة</button><button class="btn red" id="clrUser">مسح سجل المشاهدة</button></div>
@@ -1718,22 +1835,25 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       // retry items that failed with no keys before
       for (const id in App.meta) if (App.meta[id].none) delete App.meta[id];
     };
-    $('#expU').onclick = () => {
-      const blob = new Blob([JSON.stringify({ app: 'cinematheque', v: 1, at: Date.now(), user: User, overrides: App.overrides })], { type: 'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cinematheque-backup-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
-    };
-    $('#impU').onchange = async e => {
+    $('#impImdb').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return; const msg = $('#imdbMsg'); msg.textContent = '⏳ جاري الاستيراد…';
       try {
-        const j = JSON.parse(await e.target.files[0].text());
-        if (!j.user) throw 0;
-        for (const k2 of ['watched', 'list', 'rate', 'eps', 'game']) Object.assign(User[k2], j.user[k2] || {});
-        saveUser();
-        if (j.overrides) { Object.assign(App.overrides, j.overrides); await DB.put('kv', 'overrides', App.overrides); }
-        toast('تم استيراد السجل ✔');
-      } catch (err) { toast('ملف غير صالح'); }
+        const r = await App.importImdb(f);
+        msg.innerHTML = r.kind === 'ratings'
+          ? `✔ تقييماتك: ${fmtNum(r.matched)} مطابَقة في مكتبتك (عُلّمت «شاهدته» مع تقييمك) · ${fmtNum(r.missing)} ليست في مكتبتك`
+          : `✔ قائمة المشاهدة: ${fmtNum(r.matched)} أُضيفت إلى «قائمتي» · ${fmtNum(r.missing)} ليست في مكتبتك`;
+        toast('✔ تم الاستيراد من IMDb');
+        setTimeout(() => { if (location.hash === '#/settings') { const y = scrollY; route(); scrollTo(0, y); } }, 2500);
+      } catch (err) { console.error(err); msg.textContent = 'الملف غير صالح — استخدم ملف CSV المصدَّر من IMDb (ratings.csv أو watchlist.csv).'; }
+      e.target.value = '';
     };
+    view.addEventListener('click', e => {
+      const b = e.target.closest('[data-restore]'); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      App.restoreItem(b.dataset.restore); toast('↩️ أُرجع إلى المكتبة'); const y = scrollY; route(); scrollTo(0, y);
+    });
     $('#clrMeta').onclick = async () => { if (!confirm('مسح كل البيانات المحمّلة من الإنترنت؟')) return; await DB.clear('meta'); await DB.clear('coll'); await DB.clear('person'); App.meta = {}; toast('تم المسح'); route(); };
-    $('#clrUser').onclick = () => { if (!confirm('مسح سجل المشاهدة وقائمتي وتقييماتك؟ لا يمكن التراجع.')) return; for (const k2 of ['watched', 'list', 'rate', 'eps']) User[k2] = {}; saveUser(); toast('تم المسح'); };
+    $('#clrUser').onclick = () => { if (!confirm('مسح سجل المشاهدة وقائمتي وتقييماتك؟ لا يمكن التراجع.')) return; for (const k2 of ['watched', 'list', 'rate', 'eps', 'myRate', 'imdbR']) User[k2] = {}; User.imdbAt = 0; saveUser(); toast('تم المسح'); };
   };
 
   /* ---------- full library transfer between devices ---------- */
@@ -1760,19 +1880,30 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const msg = $('#allMsg'); msg.textContent = '⏳ جاري الاستيراد…';
     try {
       const j = JSON.parse(await file.text());
-      if (j.app !== 'cinematheque' || j.kind !== 'full' || !j.lib || !j.lib.items) throw new Error('bad');
+      if (!j.user && !j.lib) throw new Error('bad');
+      const mergeUser = u => {
+        for (const k of ['watched', 'list', 'rate', 'eps', 'game', 'removed', 'edits', 'myRate', 'imdbR']) User[k] = Object.assign({}, User[k], (u || {})[k] || {});
+        User.imdbAt = Math.max(User.imdbAt || 0, (u && u.imdbAt) || 0);
+        saveUser();
+      };
+      // an older "watch history only" backup: merge it, keep the library as it is
+      if (!j.lib || !j.lib.items) {
+        mergeUser(j.user);
+        if (j.overrides) { Object.assign(App.overrides, j.overrides); await DB.put('kv', 'overrides', App.overrides); }
+        App.applyEdits(); App.applyRemoved();
+        msg.textContent = '✔ تم دمج سجل المشاهدة'; toast('✔ تم دمج سجل المشاهدة'); return;
+      }
       if (App.lib && !confirm(`سيُستبدل محتوى المكتبة في هذا الجهاز بمحتوى الملف (${fmtNum(j.lib.items.length)} عنواناً). متابعة؟`)) { msg.textContent = ''; return; }
       await DB.put('kv', 'library', j.lib);
       await DB.putMany('meta', j.meta || {});
       Object.assign(App.meta, j.meta || {});
       App.overrides = Object.assign({}, App.overrides, j.overrides || {}); await DB.put('kv', 'overrides', App.overrides);
-      for (const k of ['watched', 'list', 'rate', 'eps', 'game']) User[k] = Object.assign({}, User[k], (j.user || {})[k] || {});
-      saveUser();
+      mergeUser(j.user);
       if (j.keys) { if (j.keys.omdb) Settings.set('omdbKey', j.keys.omdb); if (j.keys.tmdb) Settings.set('tmdbKey', j.keys.tmdb); }
       setLibrary(j.lib);
       toast(`✔ تم استيراد ${fmtNum(j.lib.items.length)} عنواناً مع بياناتها`);
       route();
-    } catch (e) { console.error(e); msg.textContent = 'الملف غير صالح — استخدم ملف «تصدير المكتبة كاملة».'; }
+    } catch (e) { console.error(e); msg.textContent = 'الملف غير صالح — استخدم ملفاً صدّرته من هذا التطبيق.'; }
   }
 
   /* ---------- boot ---------- */
@@ -1798,12 +1929,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     setTimeout(() => {
       m.setAttribute('content', base);
       const w = (window.visualViewport && visualViewport.width) || innerWidth;
-      // if the page still lays out narrower than the screen, force a reflow of the whole document
-      if (document.documentElement.clientWidth < w - 2) {
+      // if the page still lays out narrower or wider than the screen, force a reflow of the whole document
+      if (Math.abs(document.documentElement.clientWidth - w) > 2 || document.documentElement.scrollWidth > w + 2) {
         document.body.style.display = 'none'; void document.body.offsetHeight; document.body.style.display = '';
       }
+      if (scrollX) scrollTo(0, scrollY);
       setHdr();
     }, 60);
+    setTimeout(() => { if (scrollX || document.documentElement.scrollWidth > innerWidth + 2) { m.setAttribute('content', base + ', maximum-scale=1'); setTimeout(() => { m.setAttribute('content', base); scrollTo(0, scrollY); }, 80); } }, 700);
   }
   const onTurn = () => { clearTimeout(vpT); vpT = setTimeout(fixViewport, 250); };
   addEventListener('orientationchange', onTurn);
@@ -1871,7 +2004,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const it = cur; if (!it) return;
     const m = App.m(it.id); const raw = App.meta[it.id];
     const s = App.secOf(it.sec);
-    const watched = App.isWatched(it), inList = !!User.list[it.id], myRate = User.rate[it.id] || 0;
+    const watched = App.isWatched(it), inList = !!User.list[it.id], myRate = App.myRating(it);
     const year = App.year(it);
     const loading = !raw && Meta.hasKeys() && !err;
 
@@ -1917,11 +2050,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <button class="act${inList ? ' on2' : ''}" data-act="list">${inList ? '📌 في قائمتي' : '➕ قائمتي'}</button>
           ${m && m.trailer ? '<button class="act" data-act="trailer">🎥 الإعلان</button>' : ''}
           ${Meta.hasKeys() ? '<button class="act" data-act="fix">🔧 تصحيح المطابقة</button>' : ''}
+          <button class="act" data-act="rename">✏️ تعديل الاسم</button>
+          <button class="act" data-act="del" style="color:var(--red)">🗑️ حذف من المكتبة</button>
         </div>
-        <div class="field" style="margin-top:-6px"><span class="sub" style="margin:0">تقييمي:</span>
-          <div class="stars">${Array.from({ length: 10 }, (_, i) => `<button data-rate="${i + 1}" class="${i < myRate ? 'on' : ''}">★</button>`).join('')}</div>
-          ${myRate ? `<b>${myRate}/10</b>` : ''}</div>
-        <div id="trailerBox"></div><div id="fixBox"></div>`;
+        ${myRate ? `<div class="my-imdb"><span class="imdb-logo">IMDb</span><span>تقييمي:</span><b>${myRate}/10</b></div>`
+          : App.needsRating(it) ? `<a class="act" data-rateimdb="1" style="display:inline-flex;align-items:center;background:#f5c518;color:#000;border-color:#f5c518">⭐ قيّم الفيلم في IMDb</a>` : ''}
+        <div id="trailerBox"></div><div id="fixBox"></div><div id="renameBox"></div>`;
 
     if (m && m.overview) h += `<p class="overview" dir="auto">${esc(m.overview)}</p>`;
     const kv = [];
@@ -1945,7 +2079,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if (sim.length) h += `<h2 class="sec">🧩 مشابه من مكتبتك</h2><div class="rail">${sim.map(o => App.card(o)).join('')}</div>`;
     h += '</div>';
     const st = sheet.scrollTop;
-    sheet.innerHTML = h;
+    sheet.innerHTML = h; sheet.dataset.id = it.id;
     if (updated) sheet.scrollTop = st;
     if (m && m.coll) loadCollection(it, m.coll);
   }
@@ -2021,11 +2155,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         const m = App.m(it.id); const box = $('#trailerBox');
         box.innerHTML = box.innerHTML ? '' : `<div class="trailer"><iframe src="https://www.youtube-nocookie.com/embed/${esc(m.trailer)}?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div>`;
       } else if (a === 'fix') fixUI(it);
+      else if (a === 'del') {
+        if (!confirm(`حذف «${it.title}» من المكتبة؟\nيُحذف من التطبيق فقط (لا من الـ Excel ولا من جهازك)، ويمكن إرجاعه من الإعدادات ← الأفلام المحذوفة.`)) return;
+        App.removeItems([it.id]); close(); App.toast('🗑️ حُذف من المكتبة');
+        if (App._secApply && location.hash.startsWith('#/sec/')) App._secApply(true); else App.route();
+      } else if (a === 'rename') renameUI(it);
       else if (a === 'zoom') { const m = App.m(it.id); if (m && (m.posterBig || m.poster)) zoom(m); }
       return;
     }
-    const r = t.closest('[data-rate]');
-    if (r) { const v = +r.dataset.rate; if (User.rate[it.id] === v) delete User.rate[it.id]; else User.rate[it.id] = v; saveUser(); render(true); return; }
     const ep = t.closest('[data-ep]');
     if (ep) {
       const o = User.eps[it.id] = User.eps[it.id] || {};
@@ -2062,6 +2199,35 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const card = t.closest('.card[data-id]');
     if (card) { e.stopPropagation(); open(card.dataset.id); }
   });
+
+  function renameUI(it) {
+    const box = $('#renameBox');
+    if (box.innerHTML) { box.innerHTML = ''; return; }
+    const edited = !!User.edits[it.id];
+    box.innerHTML = `<div class="panel"><h3>✏️ تعديل الاسم</h3>
+      <div class="field"><label>الاسم</label><input id="rnT" value="${esc(it.title)}" style="direction:auto"></div>
+      <div class="field"><label>السنة</label><input id="rnY" type="number" inputmode="numeric" value="${it.year || ''}" placeholder="مثل 2014" style="max-width:140px"></div>
+      ${edited ? `<p class="sub">الاسم الأصلي من الملف: <b dir="auto">${esc(it.origTitle)}</b>${it.origYear ? ' (' + it.origYear + ')' : ''}</p>` : ''}
+      <div class="field"><button class="btn gold" id="rnSave">💾 حفظ</button>${edited ? '<button class="btn" id="rnReset">↩️ الاسم الأصلي</button>' : ''}</div>
+      <p class="sub">التعديل في التطبيق فقط ولا يغيّر اسم المجلد أو ملف الـ Excel.</p></div>`;
+    const after = async () => {
+      App.applyEdits(); App.refreshCards(it.id); render(true);
+      if (Meta.hasKeys() && confirm('هل تبحث عن بيانات الفيلم بالاسم الجديد؟')) {
+        delete App.overrides[it.id]; await DB.put('kv', 'overrides', App.overrides);
+        render(true);
+        try { await Meta.resolve(it, 'full', true); } catch (e) {}
+        App.refreshCards(it.id); if (cur === it) render();
+      }
+    };
+    $('#rnSave').onclick = () => {
+      const t = $('#rnT').value.trim(); const y = parseInt($('#rnY').value, 10) || null;
+      if (!t) return;
+      const ot = it.origTitle !== undefined ? it.origTitle : it.title, oy = it.origTitle !== undefined ? it.origYear : it.year;
+      if (t === ot && y === oy) delete User.edits[it.id]; else User.edits[it.id] = { title: t, year: y };
+      saveUser(); after();
+    };
+    if ($('#rnReset')) $('#rnReset').onclick = () => { delete User.edits[it.id]; saveUser(); after(); };
+  }
 
   function fixUI(it) {
     const box = $('#fixBox');
@@ -2567,7 +2733,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <dt>أفلام 4K</dt><dd>${fmtNum(qMap['2160p'] || 0)}</dd>
           <dt>بترجمة</dt><dd>${fmtNum(movies.filter(x => x.subs).length)} فيلماً</dd>
           <dt>قائمتي</dt><dd>${fmtNum(Object.keys(User.list).length)}</dd>
-          <dt>قيّمت بنفسك</dt><dd>${fmtNum(Object.keys(User.rate).length)}</dd></dl></div>
+          <dt>قيّمت في IMDb</dt><dd>${fmtNum(App.items.filter(it => App.myRating(it)).length)}</dd></dl></div>
       </div>`;
   };
 })();
