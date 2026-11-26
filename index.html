@@ -1040,7 +1040,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 /* سينماتيك حمد — core: state, router, home, sections, settings, background fetching */
 (function () {
   'use strict';
-  const VERSION = '1.7';
+  const VERSION = '1.8';
 
   const SECTIONS = [
     { key: 'foreign', label: 'الأفلام الأجنبية', ic: '🎞️', tv: false },
@@ -1325,7 +1325,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const b = e.target.closest('[data-rateimdb]'); if (!b) return;
     e.preventDefault(); e.stopImmediatePropagation();
     const host = b.closest('[data-id]'); const it = host && App.byId[host.dataset.id]; if (!it) return;
-    window.open(App.imdbUrl(it), '_blank', 'noopener');
+    App.openImdb(it);
   }, true);
 
   /* ---------- router ---------- */
@@ -1430,6 +1430,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const m = App.m(it.id); return m && m.imdbId && User.imdbR[m.imdbId] ? User.imdbR[m.imdbId].r : 0;
   };
   App.needsRating = it => !!User.imdbAt && it.type !== 'collection' && App.isWatched(it) && !App.myRating(it);
+  // open the film straight in the IMDb app (iPad / iPhone) without leaving empty browser tabs;
+  // fall back to the website only when the app is not installed
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  App.openImdb = it => {
+    const m = App.m(it.id); const web = App.imdbUrl(it);
+    if (!isIOS) { window.open(web, '_blank', 'noopener'); return; }
+    const appUrl = m && m.imdbId ? `imdb:///title/${m.imdbId}/` : `imdb:///find?q=${encodeURIComponent(it.title + (App.year(it) ? ' ' + App.year(it) : ''))}`;
+    let left = false; const mark = () => { left = true; };
+    document.addEventListener('visibilitychange', mark, { once: true });
+    addEventListener('pagehide', mark, { once: true }); addEventListener('blur', mark, { once: true });
+    location.href = appUrl;
+    setTimeout(() => { if (!left && !document.hidden) location.href = web; }, 1600);
+  };
   App.imdbUrl = it => { const m = App.m(it.id); return m && m.imdbId ? `https://www.imdb.com/title/${m.imdbId}/` : `https://www.imdb.com/find/?q=${encodeURIComponent(it.title + (App.year(it) ? ' ' + App.year(it) : ''))}`; };
   function parseCSV(text) {
     const rows = []; let row = [], f = '', q = false;
@@ -2020,10 +2033,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
     let rating = '';
     if (m && m.imdb && m.imdb.rating) {
-      rating = `<a class="imdb" href="https://www.imdb.com/title/${esc(m.imdbId)}/" target="_blank" rel="noopener"><span class="imdb-logo">IMDb</span>
+      rating = `<a class="imdb" role="link" data-rateimdb="1" style="cursor:pointer"><span class="imdb-logo">IMDb</span>
         <div><div class="score ltr">${m.imdb.rating.toFixed(1)}<small>/10</small></div><div class="votes">${fmtNum(m.imdb.votes)} تقييم</div></div></a>`;
     } else if (m && m.imdbId) {
-      rating = `<a class="imdb" href="https://www.imdb.com/title/${esc(m.imdbId)}/" target="_blank" rel="noopener"><span class="imdb-logo">IMDb</span><div class="votes">${Meta.keys().omdb ? (Meta.omdbLeft() > 0 ? 'جاري جلب التقييم…' : 'انتهى رصيد اليوم — يُجلب غداً') : 'أضف مفتاح OMDb لعرض التقييم'}<br>فتح صفحة الفيلم ↗</div></a>`;
+      rating = `<a class="imdb" role="link" data-rateimdb="1" style="cursor:pointer"><span class="imdb-logo">IMDb</span><div class="votes">${Meta.keys().omdb ? (Meta.omdbLeft() > 0 ? 'جاري جلب التقييم…' : 'انتهى رصيد اليوم — يُجلب غداً') : 'أضف مفتاح OMDb لعرض التقييم'}<br>فتح صفحة الفيلم ↗</div></a>`;
     }
     if (m && m.tmdbVotes > 20) rating += `<div class="imdb"><span class="imdb-logo" style="background:#01b4e4;color:#fff">TMDB</span><div><div class="score ltr">${m.tmdbRate.toFixed(1)}<small>/10</small></div><div class="votes">${fmtNum(m.tmdbVotes)} تقييم</div></div></div>`;
     if (m && m.imdb && m.imdb.awards) rating += `<div class="imdb" style="max-width:340px"><span style="font-size:22px">🏆</span><div class="votes ltr" style="font-size:12px">${esc(m.imdb.awards)}</div></div>`;
